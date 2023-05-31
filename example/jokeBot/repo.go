@@ -1,3 +1,4 @@
+//nolint:gosec
 package main
 
 import "math/rand"
@@ -10,6 +11,7 @@ func (r *fakeJokeRepo) GetARandomJoke() string {
 	if r.jokes != nil {
 		return r.jokes[rand.Intn(len(r.jokes))]
 	}
+
 	return "Why did the tomato turn red? Because it saw the salad dressing!"
 }
 
@@ -17,6 +19,7 @@ func (r *fakeJokeRepo) GetARandomGoodJoke() string {
 	if r.jokes != nil {
 		return r.jokes[rand.Intn(len(r.jokes))]
 	}
+
 	return "What do you call a fish with no eyes? A fsh."
 }
 

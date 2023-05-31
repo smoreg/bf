@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 
@@ -9,7 +10,7 @@ import (
 )
 
 type Service struct {
-	botFrame bf.BotBuilder
+	botFrame bf.ChatBot
 	repo     fakeJokeRepo
 }
 
@@ -22,7 +23,9 @@ func (s Service) start() bf.HandlerFunc {
 		layer.RegisterIButton("Bob", s.processName())
 		layer.RegisterText("Hitler", s.processBannedName())
 		layer.RegisterText(bf.AnyText, s.processName())
-		return s.botFrame.SendMsg(event.ChatID, layer)
+
+		err := s.botFrame.SendMsg(event.ChatID, layer)
+		return fmt.Errorf("failed to send message: %w", err)
 	}
 }
 
@@ -34,13 +37,18 @@ func (s Service) help(inp string) bf.HandlerFunc {
 			layer.AddText("jokes")
 			layer.AddText("Is it obvious?")
 			layer.RegisterIButton("Start", s.start())
-			return s.botFrame.SendMsg(event.ChatID, layer)
+
+			err := s.botFrame.SendMsg(event.ChatID, layer)
+			return fmt.Errorf("failed to send message: %w", err)
 		}
+
 		layer.AddText("Welcome to help!")
 		layer.AddText("There is example help text for \"" + inp + "\"")
 		layer.AddText("How about start?")
 		layer.RegisterIButton("Start", s.start())
-		return s.botFrame.SendMsg(event.ChatID, layer)
+
+		err := s.botFrame.SendMsg(event.ChatID, layer)
+		return fmt.Errorf("failed to send message: %w", err)
 	}
 }
 
@@ -50,9 +58,11 @@ func (s Service) processName() bf.HandlerFunc {
 		if err != nil {
 			return errors.Wrap(err, "can't get name")
 		}
-		if name == "Hitler" {
+
+		if name == "SomeBadGuy" {
 			return s.processBannedName()(ctx, event)
 		}
+
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Hello, " + name)
 		layer.AddText("How are you? From 1 to 5")
@@ -61,6 +71,7 @@ func (s Service) processName() bf.HandlerFunc {
 		layer.RegisterIButton("3", s.processNeutralFeeling(name, "3"))
 		layer.RegisterIButton("4", s.processNeutralFeeling(name, "4"))
 		layer.RegisterIButton("5", s.processGoodFeeling(name, "5"))
+
 		return s.botFrame.SendMsg(event.ChatID, layer)
 	}
 }
@@ -71,65 +82,72 @@ func (s Service) processBannedName() bf.HandlerFunc {
 		if err != nil {
 			return errors.Wrap(err, "can't get name")
 		}
+
 		err = s.botFrame.SendText(event.ChatID, "Sorry, but you are banned, "+name)
 		if err != nil {
 			return errors.Wrap(err, "can't send text")
 		}
+
 		return s.botFrame.RetryLastLayer(event, "Choose another name")
 	}
 }
 
-func (s Service) processWorstFeeling(name string, s2 string) bf.HandlerFunc {
+func (s Service) processWorstFeeling(name string, feelingScore string) bf.HandlerFunc {
 	return func(ctx context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Sorry, " + name + "!")
 		layer.AddText("I hope you will feel better")
 		layer.AddText("I will send you a joke")
-		if s2 == "1" {
+
+		if feelingScore == "1" {
 			layer.AddText("`" + s.repo.GetARandomGoodJoke() + "`")
 		} else {
 			layer.AddText("`" + s.repo.GetARandomJoke() + "`")
 		}
 
 		layer.AddText("Do you want to see more?")
-		layer.RegisterIButton("Yes", s.processWorstFeeling(name, s2))
+		layer.RegisterIButton("Yes", s.processWorstFeeling(name, feelingScore))
 		layer.RegisterIButton("No", s.start())
+
 		return s.botFrame.SendMsg(event.ChatID, layer)
 	}
 }
 
-func (s Service) processNeutralFeeling(name string, s2 string) bf.HandlerFunc {
+func (s Service) processNeutralFeeling(name string, _ string) bf.HandlerFunc {
 	return func(ctx context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Ok, " + name + "!")
 		layer.AddText("I hope you will feel better")
 		layer.RegisterIButton("Back", s.start())
+
 		return s.botFrame.SendMsg(event.ChatID, layer)
 	}
 }
 
-func (s Service) processGoodFeeling(name string, s2 string) bf.HandlerFunc {
+func (s Service) processGoodFeeling(name string, _ string) bf.HandlerFunc {
 	return func(ctx context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Great, " + name + "!")
 		layer.AddText("I am glad to hear that")
 		layer.AddText("If you have such a mood, you can type me a joke. Or just press \"Back\"")
 		layer.RegisterIButton("How to write jokes?", s.help("how to write jokes?"))
-		layer.RegisterText(bf.AnyText, s.processJoke(name))
+		layer.RegisterText(bf.AnyText, s.processJoke())
 		layer.RegisterIButton("Back", s.start())
+
 		return s.botFrame.SendMsg(event.ChatID, layer)
 	}
 }
 
-func (s Service) processJoke(name string) bf.HandlerFunc {
+func (s Service) processJoke() bf.HandlerFunc {
 	return func(ctx context.Context, event bf.Event) error {
 		joke := event.Text
 		layer := s.botFrame.NewLayer()
-		layer.AddText("Ahahaa! That is a good joke:")
+		layer.AddText("Aha-ha! That is a good joke:")
 		layer.AddText(joke)
 		layer.AddText("Let me save it?")
 		layer.RegisterIButton("Yes", s.saveJoke(joke))
 		layer.RegisterIButton("No", s.start())
+
 		return s.botFrame.SendMsg(event.ChatID, layer)
 	}
 }
@@ -141,9 +159,9 @@ func (s Service) saveJoke(joke string) bf.HandlerFunc {
 		s.repo.SaveJoke(joke)
 		layer.AddText("Thx you!")
 		layer.RegisterIButton("Back", s.start())
+
 		return s.botFrame.SendMsg(event.ChatID, layer)
 	}
-
 }
 
 func getStringFromButtonOrPrompt(event bf.Event) (string, error) {
@@ -152,6 +170,8 @@ func getStringFromButtonOrPrompt(event bf.Event) (string, error) {
 		return event.Text, nil
 	case bf.EventKindInlineButton:
 		return event.ButtonText, nil
+	case bf.EventKindCommand, bf.EventKindVoice:
+		fallthrough
 	default:
 		return "", errors.New("unexpected event kind")
 	}

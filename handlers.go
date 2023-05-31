@@ -13,16 +13,20 @@ import (
 // 1. Create layer and in use in SendMsg. That way your layer will be used for next 1 user message and wipe after.
 // 2. Default layer. That layer process all messages that doesn't have any chat-specific one-time layers.
 type HandlerLayer struct {
+	// text that will be sent to user on SendMsg. If "" then nothing will be sent.
+	// TODO send empty text
 	text string
 
 	commandHandler map[string]CommandHandler
 	textHandler    map[string]TextHandler
 	buttonHandler  map[string]InlineButtonHandler
+	audioHandler   *AudioHandler
 
 	layerDefaultHandler HandlerFunc
 
 	ttl                time.Time
 	generalMiddlewares []MiddlewareFunc
+	rowMode            bool
 }
 
 // Handler get a HandlerFunc for event.
@@ -33,6 +37,7 @@ func (hl *HandlerLayer) Handler(event Event) HandlerFunc {
 		if ok {
 			return handlerText.handlerFunc
 		}
+
 		handlerText, ok = hl.textHandler["*"]
 		if ok {
 			return handlerText.handlerFunc
@@ -47,7 +52,12 @@ func (hl *HandlerLayer) Handler(event Event) HandlerFunc {
 		if ok {
 			return handlerButton.handlerFunc
 		}
+	case EventKindVoice:
+		if hl.audioHandler != nil {
+			return hl.audioHandler.handlerFunc
+		}
 	}
+
 	return hl.layerDefaultHandler
 }
 
@@ -85,6 +95,11 @@ type TextHandler struct {
 	kind        TextHandlerKind
 }
 
+type AudioHandler struct {
+	id          uuid.UUID
+	handlerFunc HandlerFunc
+}
+
 type CommandHandler struct {
 	command     string
 	id          uuid.UUID
@@ -100,7 +115,6 @@ func (hl *HandlerLayer) RegisterCommand(command string, handler HandlerFunc) {
 }
 
 func (hl *HandlerLayer) RegisterText(text string, handler HandlerFunc) {
-
 	hl.textHandler[text] = TextHandler{
 		text:        text,
 		id:          uuid.New(),
@@ -130,7 +144,19 @@ func (hl *HandlerLayer) RegisterIButton(text string, handler HandlerFunc) {
 	}
 }
 
-func (hl *HandlerLayer) RegisterIButtonSwitch(text string, link string, handler HandlerFunc) {
+func (hl *HandlerLayer) RegisterIButtonURL(text, url string) {
+	id := uuid.New()
+
+	hl.buttonHandler[id.String()] = InlineButtonHandler{
+		button:      tgbotapi.NewInlineKeyboardButtonURL(text, url),
+		text:        text,
+		id:          id,
+		handlerFunc: nil,
+		orderWeight: len(hl.buttonHandler),
+	}
+}
+
+func (hl *HandlerLayer) RegisterIButtonSwitch(text, link string, handler HandlerFunc) {
 	id := uuid.New()
 	hl.buttonHandler[id.String()] = InlineButtonHandler{
 		button:      tgbotapi.NewInlineKeyboardButtonSwitch(text, link),
@@ -146,6 +172,7 @@ func (hl *HandlerLayer) AddText(text string) {
 		hl.text = text
 		return
 	}
+
 	hl.text += "\n" + text
 }
 
@@ -154,8 +181,21 @@ func (hl *HandlerLayer) sortedIButtonsSlice() []InlineButtonHandler {
 	for _, v := range hl.buttonHandler {
 		res = append(res, v)
 	}
+
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].orderWeight < res[j].orderWeight
 	})
+
 	return res
+}
+
+func (hl *HandlerLayer) SetIButtonRowMode() {
+	hl.rowMode = true
+}
+
+func (hl *HandlerLayer) RegisterVoice(handler HandlerFunc) {
+	hl.audioHandler = &AudioHandler{
+		id:          uuid.New(),
+		handlerFunc: handler,
+	}
 }

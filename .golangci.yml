@@ -1,0 +1,55 @@
+run:
+  timeout: 1m
+  issues-exit-code: 200
+  tests: false
+
+output:
+  uniq-by-line: false
+
+linters-settings:
+  varnamelen:
+    ignore-names:
+      - ok
+  interfacebloat:
+    max: 25
+  gofumpt:
+    lang-version: "1.20"
+  lll:
+    line-length: 120
+  cyclop:
+    max-complexity: 12
+  gomnd:
+    settings:
+      mnd:
+        ignored-numbers: 2,10,24,30,60,100,365,1024
+        ignored-functions: math.*,strconv.*
+  forbidigo:
+    forbid:
+      - ^print.*$
+      - 'fmt\.Print.*'
+      - 'fmt\.Println'
+      - panic
+      - 'log\.Print.*'
+      - 'log\.Fatal.*'
+
+linters:
+  enable-all: true
+  disable:
+    - nlreturn
+    - golint
+    - scopelint
+    - varcheck
+    - deadcode
+    - nosnakecase
+    - maligned
+    - interfacer
+    - ifshort
+    - exhaustivestruct
+    - structcheck
+    - exhaustruct
+
+issues:
+  exclude-rules:
+    - linters:
+        - godox
+      text: "TODO"
