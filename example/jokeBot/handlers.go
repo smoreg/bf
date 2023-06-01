@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
-
 	"github.com/smoreg/bf"
 )
 
@@ -25,7 +23,8 @@ func (s Service) start() bf.HandlerFunc {
 		layer.RegisterText(bf.AnyText, s.processName())
 
 		err := s.botFrame.SendMsg(event.ChatID, layer)
-		return fmt.Errorf("failed to send message: %w", err)
+
+		return errors.Wrap(err, "failed to send message")
 	}
 }
 
@@ -39,7 +38,8 @@ func (s Service) help(inp string) bf.HandlerFunc {
 			layer.RegisterIButton("Start", s.start())
 
 			err := s.botFrame.SendMsg(event.ChatID, layer)
-			return fmt.Errorf("failed to send message: %w", err)
+
+			return errors.Wrap(err, "failed to send message")
 		}
 
 		layer.AddText("Welcome to help!")
@@ -48,7 +48,8 @@ func (s Service) help(inp string) bf.HandlerFunc {
 		layer.RegisterIButton("Start", s.start())
 
 		err := s.botFrame.SendMsg(event.ChatID, layer)
-		return fmt.Errorf("failed to send message: %w", err)
+
+		return errors.Wrap(err, "failed to send message")
 	}
 }
 
@@ -72,7 +73,8 @@ func (s Service) processName() bf.HandlerFunc {
 		layer.RegisterIButton("4", s.processNeutralFeeling(name, "4"))
 		layer.RegisterIButton("5", s.processGoodFeeling(name, "5"))
 
-		return s.botFrame.SendMsg(event.ChatID, layer)
+		return errors.Wrap(
+			s.botFrame.SendMsg(event.ChatID, layer), "can't send message with greeting")
 	}
 }
 
@@ -88,7 +90,8 @@ func (s Service) processBannedName() bf.HandlerFunc {
 			return errors.Wrap(err, "can't send text")
 		}
 
-		return s.botFrame.RetryLastLayer(event, "Choose another name")
+		return errors.Wrap(
+			s.botFrame.RetryLastLayer(event, "Choose another name"), "can't retry last layer")
 	}
 }
 
@@ -109,7 +112,8 @@ func (s Service) processWorstFeeling(name string, feelingScore string) bf.Handle
 		layer.RegisterIButton("Yes", s.processWorstFeeling(name, feelingScore))
 		layer.RegisterIButton("No", s.start())
 
-		return s.botFrame.SendMsg(event.ChatID, layer)
+		return errors.Wrap(
+			s.botFrame.SendMsg(event.ChatID, layer), "can't send message with joke")
 	}
 }
 
@@ -120,7 +124,8 @@ func (s Service) processNeutralFeeling(name string, _ string) bf.HandlerFunc {
 		layer.AddText("I hope you will feel better")
 		layer.RegisterIButton("Back", s.start())
 
-		return s.botFrame.SendMsg(event.ChatID, layer)
+		return errors.Wrap(
+			s.botFrame.SendMsg(event.ChatID, layer), "can't send message neutral feeling")
 	}
 }
 
@@ -134,7 +139,8 @@ func (s Service) processGoodFeeling(name string, _ string) bf.HandlerFunc {
 		layer.RegisterText(bf.AnyText, s.processJoke())
 		layer.RegisterIButton("Back", s.start())
 
-		return s.botFrame.SendMsg(event.ChatID, layer)
+		return errors.Wrap(
+			s.botFrame.SendMsg(event.ChatID, layer), "can't send message")
 	}
 }
 
@@ -148,7 +154,8 @@ func (s Service) processJoke() bf.HandlerFunc {
 		layer.RegisterIButton("Yes", s.saveJoke(joke))
 		layer.RegisterIButton("No", s.start())
 
-		return s.botFrame.SendMsg(event.ChatID, layer)
+		return errors.Wrap(
+			s.botFrame.SendMsg(event.ChatID, layer), "can't send message with process joke")
 	}
 }
 
@@ -160,7 +167,8 @@ func (s Service) saveJoke(joke string) bf.HandlerFunc {
 		layer.AddText("Thx you!")
 		layer.RegisterIButton("Back", s.start())
 
-		return s.botFrame.SendMsg(event.ChatID, layer)
+		return errors.Wrap(
+			s.botFrame.SendMsg(event.ChatID, layer), "can't send message with save joke")
 	}
 }
 

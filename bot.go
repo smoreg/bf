@@ -106,7 +106,7 @@ func (b *ChatBotImpl) SendText(chatID int64, text string) error {
 
 	_, err := b.tgbot.Send(tgbotapi.NewMessage(chatID, layer.text))
 
-	return fmt.Errorf("failed to send text: %w", err)
+	return errors.Wrap(err, "failed to send text")
 }
 
 // NewLayer creates new layer. Layer is a set of handlers for different types of events.
