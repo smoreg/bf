@@ -1,4 +1,4 @@
-<img align="right" width="290" height="290" src="https://i.ibb.co/P69qSRC/smoreg-Combine-the-image-of-the-Golang-Gopher-and-Cthulhu-into-59680cfc-4566-4e6b-bbfb-791d2dd37d94.png">
+<img alt="golhu" align="right" width="290" height="290" src="https://i.ibb.co/P69qSRC/smoreg-Combine-the-image-of-the-Golang-Gopher-and-Cthulhu-into-59680cfc-4566-4e6b-bbfb-791d2dd37d94.png">
 
 # BF - bot framework
 
@@ -17,3 +17,4 @@ Go to example folder for usage.
 - [ ] Add docs
 - [ ] Check todo
 - [ ] Check inspect code
+- [ ] Add CI

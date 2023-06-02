@@ -16,7 +16,7 @@ type Event struct {
 	Button           string    `json:"button"`
 	ButtonText       string    `json:"buttonText"`
 	ChatID           int64     `json:"chatID"`
-	UserTGID         int64     `json:"userTGId"`
+	UserTGID         int64     `json:"userTGID"`
 	FirstName        string    `json:"firstName"`
 	LastName         string    `json:"lastName"`
 	UserTgUsername   string    `json:"userTgUsername"`
