@@ -18,3 +18,5 @@ Go to example folder for usage.
 - [ ] Check todo
 - [ ] Check inspect code
 - [ ] Add CI
+- [ ] Add CI badges
+- [ ] Add coverage
