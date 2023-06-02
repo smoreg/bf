@@ -16,7 +16,9 @@ type ChatBot interface {
 	RegisterDefaultHandler(handler HandlerFunc)
 	// RegisterCommand registers a handler for a command.
 	RegisterCommand(command string, handler HandlerFunc)
+	// RegisterIButton registers a new inline button with the given text and handler function.
 	RegisterIButton(btn string, handler HandlerFunc)
+
 	// RegisterMiddleware middlewares before any handler that matches the filter function.
 	// If the filter function returns true, the middleware will be applied.
 	// If filterFunc is nil, the middleware will be applied to all handlers.

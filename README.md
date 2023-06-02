@@ -10,7 +10,7 @@ Go to example folder for usage.
 ## License
 [MIT License](LICENSE)
 
-## TOOD
+## TODO
 
 - [ ] Add tests
 - [x] Add examples

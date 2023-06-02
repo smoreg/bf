@@ -35,6 +35,7 @@ linters-settings:
 linters:
   enable-all: true
   disable:
+    - tagliatelle
     - nlreturn
     - golint
     - scopelint

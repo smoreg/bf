@@ -2,10 +2,9 @@ package main
 
 import (
 	"context"
-	"os"
-
 	"github.com/sirupsen/logrus"
 	"github.com/smoreg/bf"
+	"os"
 )
 
 func main() {

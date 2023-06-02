@@ -1,0 +1,8 @@
+[leaks]
+# Add custom rules or modify existing ones as needed
+files = ["passwords.toml", "secrets.yaml", "*.pem"]
+regexes = [
+"(?i)password",
+"(?i)secret",
+"(?i)apikey"
+]

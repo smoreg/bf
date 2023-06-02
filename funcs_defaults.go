@@ -4,14 +4,15 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 func (b *ChatBotImpl) defaultErrorHandler(_ context.Context, event Event, err error) {
-	logrus.WithError(err).Errorf("failed to process event: %+v", event)
+	b.logger.Errorf("defaultErrorHandler process error: %+v for event: %+v", err, event)
 }
 
 func (b *ChatBotImpl) defaultEventHandler(_ context.Context, event Event) error {
+	b.logger.Debugf("defaultEventHandler process event: %+v", event)
+
 	if b.debug {
 		jsonView, err := event.json()
 		if err != nil {

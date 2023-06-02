@@ -15,8 +15,8 @@ type Event struct {
 	Command          string    `json:"command"`
 	Button           string    `json:"button"`
 	ButtonText       string    `json:"buttonText"`
-	ChatID           int64     `json:"chatId"`
-	UserTGID         int64     `json:"userTgId"`
+	ChatID           int64     `json:"chatID"`
+	UserTGID         int64     `json:"userTGId"`
 	FirstName        string    `json:"firstName"`
 	LastName         string    `json:"lastName"`
 	UserTgUsername   string    `json:"userTgUsername"`
