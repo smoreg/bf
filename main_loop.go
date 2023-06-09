@@ -32,7 +32,7 @@ func (c *chatController) cleanOld() {
 // LockChat returns true if chat is already in work.
 func (c *chatController) LockChat(chatID int64) bool {
 	c.mux.Lock()
-	defer c.mux.Lock()
+	defer c.mux.Unlock()
 
 	_, ok := c.userInWork[chatID]
 	if ok {
@@ -46,7 +46,7 @@ func (c *chatController) LockChat(chatID int64) bool {
 
 func (c *chatController) UnlockChat(chatID int64) {
 	c.mux.Lock()
-	defer c.mux.Lock()
+	defer c.mux.Unlock()
 	delete(c.userInWork, chatID)
 }
 
