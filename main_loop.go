@@ -13,10 +13,10 @@ const chatControllerTTL = 1 * time.Minute
 // chatController control that only 1 message from user will be processed at the same time.
 type chatController struct {
 	userInWork map[int64]time.Time
-	mux        *sync.Mutex
+	mux        sync.Mutex
 }
 
-func (c chatController) cleanOld() {
+func (c *chatController) cleanOld() {
 	for {
 		time.Sleep(chatControllerTTL)
 		c.mux.Lock()
@@ -30,7 +30,7 @@ func (c chatController) cleanOld() {
 }
 
 // LockChat returns true if chat is already in work.
-func (c chatController) LockChat(chatID int64) bool {
+func (c *chatController) LockChat(chatID int64) bool {
 	c.mux.Lock()
 	defer c.mux.Lock()
 
@@ -44,7 +44,7 @@ func (c chatController) LockChat(chatID int64) bool {
 	return false
 }
 
-func (c chatController) UnlockChat(chatID int64) {
+func (c *chatController) UnlockChat(chatID int64) {
 	c.mux.Lock()
 	defer c.mux.Lock()
 	delete(c.userInWork, chatID)
@@ -53,6 +53,7 @@ func (c chatController) UnlockChat(chatID int64) {
 func newChatController() chatController {
 	blocker := chatController{
 		userInWork: make(map[int64]time.Time),
+		mux:        sync.Mutex{},
 	}
 	go blocker.cleanOld()
 
