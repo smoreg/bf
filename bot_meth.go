@@ -187,14 +187,14 @@ func (b *ChatBotImpl) SendMsg(chatID int64, layer *HandlerLayer) error {
 		return errors.New("can't send both inline and regular buttons")
 	}
 
-	b.setLayer(layer, chatID)
-
 	message.ParseMode = b.parseMode
 
 	_, err := b.tgbot.Send(message)
 	if err != nil {
 		return fmt.Errorf("failed to send message: %w", err)
 	}
+
+	b.setLayer(layer, chatID)
 
 	return nil
 }

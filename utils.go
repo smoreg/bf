@@ -55,7 +55,7 @@ func (b *ChatBotImpl) buildInlineKeyboard(
 	rawIButtons []tgbotapi.InlineKeyboardButton,
 	rowMode bool,
 ) tgbotapi.InlineKeyboardMarkup {
-	if rowMode {
+	if rowMode && len(rawIButtons) >= 2 {
 		return tgbotapi.InlineKeyboardMarkup{
 			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
 				rawIButtons[:len(rawIButtons)-1],
