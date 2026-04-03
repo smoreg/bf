@@ -93,6 +93,7 @@ type TextHandler struct {
 	id          uuid.UUID
 	handlerFunc HandlerFunc
 	kind        TextHandlerKind
+	orderWeight int
 }
 
 type AudioHandler struct {
@@ -129,6 +130,7 @@ func (hl *HandlerLayer) RegisterButton(text string, handler HandlerFunc) {
 		id:          uuid.New(),
 		handlerFunc: handler,
 		kind:        TextHandlerKindButton,
+		orderWeight: len(hl.textHandler),
 	}
 }
 
@@ -180,6 +182,21 @@ func (hl *HandlerLayer) sortedIButtonsSlice() []InlineButtonHandler {
 	res := make([]InlineButtonHandler, 0, len(hl.buttonHandler))
 	for _, v := range hl.buttonHandler {
 		res = append(res, v)
+	}
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].orderWeight < res[j].orderWeight
+	})
+
+	return res
+}
+
+func (hl *HandlerLayer) sortedButtonsSlice() []TextHandler {
+	res := make([]TextHandler, 0, len(hl.textHandler))
+	for _, v := range hl.textHandler {
+		if v.kind == TextHandlerKindButton {
+			res = append(res, v)
+		}
 	}
 
 	sort.Slice(res, func(i, j int) bool {

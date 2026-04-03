@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 1m
   issues-exit-code: 200
@@ -37,16 +39,6 @@ linters:
   disable:
     - tagliatelle
     - nlreturn
-    - golint
-    - scopelint
-    - varcheck
-    - deadcode
-    - nosnakecase
-    - maligned
-    - interfacer
-    - ifshort
-    - exhaustivestruct
-    - structcheck
     - exhaustruct
 
 issues:

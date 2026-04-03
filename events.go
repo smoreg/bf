@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/pkg/errors"
 )
 
 // Event is a struct that represents event from telegram.
@@ -33,7 +32,7 @@ func (e *Event) String() string {
 func (e *Event) json() (string, error) {
 	ind, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
-		return "", errors.Wrap(err, "failed to marshal event to json")
+		return "", fmt.Errorf("failed to marshal event to json: %w", err)
 	}
 
 	return string(ind), nil

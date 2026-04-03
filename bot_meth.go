@@ -2,11 +2,11 @@ package bf
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/pkg/errors"
 )
 
 const maxLoaderTicks = 20
@@ -17,7 +17,7 @@ func (b *ChatBotImpl) Start(ctx context.Context) error {
 
 	err := b.validateConfiguration()
 	if err != nil {
-		return errors.Wrap(err, "failed to validate configuration")
+		return fmt.Errorf("failed to validate configuration: %w", err)
 	}
 
 	updates := b.tgbot.GetUpdatesChan(tgbotapi.UpdateConfig{
@@ -31,7 +31,7 @@ func (b *ChatBotImpl) Start(ctx context.Context) error {
 func (b *ChatBotImpl) GetFileURL(fileID string) (string, error) {
 	url, err := b.tgbot.GetFileDirectURL(fileID)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get file direct url")
+		return "", fmt.Errorf("failed to get file direct url: %w", err)
 	}
 
 	return url, nil
@@ -43,6 +43,11 @@ func (b *ChatBotImpl) GetFileURL(fileID string) (string, error) {
 // !!! WARNING !!!
 // Don't forget to call cancel() when operation is finished.
 func (b *ChatBotImpl) LoaderButton(chatID int64, loadScreen []string) context.CancelFunc {
+	if len(loadScreen) == 0 {
+		b.logger.Errorf("LoaderButton: loadScreen cannot be empty")
+		return func() {}
+	}
+
 	loaderCtx, cancel := context.WithCancel(context.Background())
 
 	go func() {
@@ -126,7 +131,10 @@ func (b *ChatBotImpl) RegisterAudio(handler HandlerFunc) {
 // SendText sends simple text to chat. Doesn't affect any layers.
 func (b *ChatBotImpl) SendText(chatID int64, text string) error {
 	_, err := b.tgbot.Send(tgbotapi.NewMessage(chatID, text))
-	return errors.Wrap(err, "failed to send text")
+	if err != nil {
+		return fmt.Errorf("failed to send text: %w", err)
+	}
+	return nil
 }
 
 // NewLayer creates new layer. Layer is a set of handlers for different types of events.
@@ -154,16 +162,15 @@ func (b *ChatBotImpl) SendMsg(chatID int64, layer *HandlerLayer) error {
 	sortedIButtonsSlice := layer.sortedIButtonsSlice()
 	rawIButtons := make([]tgbotapi.InlineKeyboardButton, 0, len(sortedIButtonsSlice))
 
-	var rawButtons []tgbotapi.KeyboardButton
+	sortedButtonsSlice := layer.sortedButtonsSlice()
+	rawButtons := make([]tgbotapi.KeyboardButton, 0, len(sortedButtonsSlice))
 
 	for _, button := range sortedIButtonsSlice {
 		rawIButtons = append(rawIButtons, button.button)
 	}
 
-	for _, button := range layer.textHandler {
-		if button.kind == TextHandlerKindButton {
-			rawButtons = append(rawButtons, tgbotapi.NewKeyboardButton(button.text))
-		}
+	for _, button := range sortedButtonsSlice {
+		rawButtons = append(rawButtons, tgbotapi.NewKeyboardButton(button.text))
 	}
 
 	isInline := len(rawIButtons) > 0
@@ -185,8 +192,11 @@ func (b *ChatBotImpl) SendMsg(chatID int64, layer *HandlerLayer) error {
 	message.ParseMode = b.parseMode
 
 	_, err := b.tgbot.Send(message)
+	if err != nil {
+		return fmt.Errorf("failed to send message: %w", err)
+	}
 
-	return errors.Wrap(err, "failed to send message")
+	return nil
 }
 
 // RetryLastLayer sends previous layer to chat with given ID. If newText is not empty, it will be used instead of
@@ -195,7 +205,7 @@ func (b *ChatBotImpl) RetryLastLayer(event Event, newText string) error {
 	previousLayer := event.lastLayer
 
 	if previousLayer == nil {
-		return errors.Errorf("RetryLastLayer: no previous layer for chat %d", event.ChatID)
+		return fmt.Errorf("RetryLastLayer: no previous layer for chat %d", event.ChatID)
 	}
 
 	if newText != "" {
@@ -227,14 +237,9 @@ func (b *ChatBotImpl) RegisterDefaultHandler(handler HandlerFunc) {
 
 // findAndWipeChatLayerHandler finds layer for chatID and deletes it from layers map.
 func (b *ChatBotImpl) findAndWipeChatLayerHandler(chatID int64) *HandlerLayer {
-	layer, ok := b.getLayer(chatID)
-
+	layer, ok := b.getAndDeleteLayer(chatID)
 	if !ok {
 		return b.defaultHandlerLayer
-	}
-
-	if ok {
-		b.deleteLayer(chatID)
 	}
 
 	return layer

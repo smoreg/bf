@@ -1,11 +1,11 @@
 package bf
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -70,7 +70,7 @@ func NewBot(apikey string, opts ...BotOption) (*ChatBotImpl, error) {
 
 	bot, err := tgbotapi.NewBotAPI(apikey)
 	if err != nil {
-		return chatBotInstance, errors.Wrap(err, "failed to create bot")
+		return chatBotInstance, fmt.Errorf("failed to create bot: %w", err)
 	}
 
 	chatBotInstance.tgbot = bot

@@ -1,23 +1,22 @@
 package bf
 
 import (
+	"errors"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/pkg/errors"
 )
 
-func (b *ChatBotImpl) deleteLayer(chatID int64) {
+// getAndDeleteLayer atomically gets and deletes a layer for chatID.
+// This prevents TOCTOU race condition between getLayer and deleteLayer.
+func (b *ChatBotImpl) getAndDeleteLayer(chatID int64) (*HandlerLayer, bool) {
 	b.layersMutex.Lock()
-	delete(b.chatHandlerLayers, chatID)
-	b.layersMutex.Unlock()
-}
-
-func (b *ChatBotImpl) getLayer(chatID int64) (*HandlerLayer, bool) {
-	b.layersMutex.RLock()
-	defer b.layersMutex.RUnlock()
+	defer b.layersMutex.Unlock()
 
 	layer, ok := b.chatHandlerLayers[chatID]
+	if ok {
+		delete(b.chatHandlerLayers, chatID)
+	}
 
 	return layer, ok
 }
