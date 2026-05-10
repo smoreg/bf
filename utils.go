@@ -7,8 +7,11 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// getAndDeleteLayer atomically gets and deletes a layer for chatID.
-// This prevents TOCTOU race condition between getLayer and deleteLayer.
+const cleanerTickInterval = 10 * time.Minute
+
+// getAndDeleteLayer atomically returns and deletes the layer for chatID.
+// Combining the two operations under one lock prevents a TOCTOU race
+// where two goroutines could read and serve the same layer.
 func (b *ChatBotImpl) getAndDeleteLayer(chatID int64) (*HandlerLayer, bool) {
 	b.layersMutex.Lock()
 	defer b.layersMutex.Unlock()
@@ -21,17 +24,24 @@ func (b *ChatBotImpl) getAndDeleteLayer(chatID int64) (*HandlerLayer, bool) {
 	return layer, ok
 }
 
-// cleaner removes expired layers left by users.
+// cleaner periodically removes expired chat layers. Stops when shutdown is closed.
 func (b *ChatBotImpl) cleaner() {
+	ticker := time.NewTicker(cleanerTickInterval)
+	defer ticker.Stop()
+
 	for {
-		time.Sleep(10 * time.Minute)
-		b.layersMutex.Lock()
-		for chatID, layer := range b.chatHandlerLayers {
-			if layer.IsExpired() {
-				delete(b.chatHandlerLayers, chatID)
+		select {
+		case <-b.shutdown:
+			return
+		case <-ticker.C:
+			b.layersMutex.Lock()
+			for chatID, layer := range b.chatHandlerLayers {
+				if layer.IsExpired() {
+					delete(b.chatHandlerLayers, chatID)
+				}
 			}
+			b.layersMutex.Unlock()
 		}
-		b.layersMutex.Unlock()
 	}
 }
 

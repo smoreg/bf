@@ -1,6 +1,7 @@
 vendor
 .vscode
 .idea
+.claude
 *.swp
 *.swo
 *.tmp
@@ -12,3 +13,7 @@ Thumbs.db
 .env.*.local
 .env.override
 
+# build / test artefacts
+coverage.out
+coverage.html
+dist/

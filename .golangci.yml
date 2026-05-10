@@ -1,9 +1,9 @@
 version: "2"
 
 run:
-  timeout: 1m
-  issues-exit-code: 200
-  tests: false
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
 
 output:
   uniq-by-line: false
@@ -15,7 +15,7 @@ linters-settings:
   interfacebloat:
     max: 25
   gofumpt:
-    lang-version: "1.20"
+    lang-version: "1.26"
   lll:
     line-length: 120
   cyclop:
@@ -46,3 +46,12 @@ issues:
     - linters:
         - godox
       text: "TODO"
+    - path: _test\.go
+      linters:
+        - funlen
+        - gocognit
+        - cyclop
+        - varnamelen
+        - dupl
+        - gomnd
+        - mnd

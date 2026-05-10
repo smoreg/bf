@@ -8,13 +8,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// HandlerLayer handlers for events from 1 chat.
-// There is 2 most common usages:
-// 1. Create layer and in use in SendMsg. That way your layer will be used for next 1 user message and wipe after.
-// 2. Default layer. That layer process all messages that doesn't have any chat-specific one-time layers.
+// HandlerLayer groups handlers that may fire for events from one chat.
+//
+// Two common use cases:
+//  1. Build a layer and pass it to SendMsg — the layer matches the very next
+//     message from the user, then is wiped.
+//  2. The bot's default layer, used whenever no chat-specific layer is set.
+//     The default layer is never wiped automatically.
 type HandlerLayer struct {
-	// text that will be sent to user on SendMsg. If "" then nothing will be sent.
-	// TODO send empty text
 	text string
 
 	commandHandler map[string]CommandHandler
@@ -29,28 +30,24 @@ type HandlerLayer struct {
 	rowMode            bool
 }
 
-// Handler get a HandlerFunc for event.
+// Handler returns the HandlerFunc that should process the given event,
+// or the layer's default handler if no specific handler is registered.
 func (hl *HandlerLayer) Handler(event Event) HandlerFunc {
 	switch event.Kind {
 	case EventKindText:
-		handlerText, ok := hl.textHandler[event.Text]
-		if ok {
-			return handlerText.handlerFunc
+		if h, ok := hl.textHandler[event.Text]; ok {
+			return h.handlerFunc
 		}
-
-		handlerText, ok = hl.textHandler["*"]
-		if ok {
-			return handlerText.handlerFunc
+		if h, ok := hl.textHandler[AnyText]; ok {
+			return h.handlerFunc
 		}
 	case EventKindCommand:
-		handlerCommand, ok := hl.commandHandler["/"+event.Command]
-		if ok {
-			return handlerCommand.handlerFunc
+		if h, ok := hl.commandHandler["/"+event.Command]; ok {
+			return h.handlerFunc
 		}
 	case EventKindInlineButton:
-		handlerButton, ok := hl.buttonHandler[event.Button]
-		if ok {
-			return handlerButton.handlerFunc
+		if h, ok := hl.buttonHandler[event.Button]; ok {
+			return h.handlerFunc
 		}
 	case EventKindVoice:
 		if hl.audioHandler != nil {
@@ -61,10 +58,12 @@ func (hl *HandlerLayer) Handler(event Event) HandlerFunc {
 	return hl.layerDefaultHandler
 }
 
+// IsExpired reports whether the layer's TTL has elapsed.
 func (hl *HandlerLayer) IsExpired() bool {
 	return time.Now().After(hl.ttl)
 }
 
+// IsEmpty reports whether the layer has no registered handlers at all.
 func (hl *HandlerLayer) IsEmpty() bool {
 	return len(hl.textHandler) == 0 &&
 		len(hl.commandHandler) == 0 &&
@@ -72,22 +71,28 @@ func (hl *HandlerLayer) IsEmpty() bool {
 		hl.layerDefaultHandler == nil
 }
 
+// InlineButtonHandler is one inline-keyboard button bound to a handler.
 type InlineButtonHandler struct {
 	text        string
 	id          uuid.UUID
 	handlerFunc HandlerFunc
 	orderWeight int
-	button      tgbotapi.InlineKeyboardButton // TODO data duplicate
+	button      tgbotapi.InlineKeyboardButton
 }
 
+// TextHandlerKind discriminates plain text matches from reply-keyboard buttons.
 type TextHandlerKind string
 
+// Text-handler kinds and the wildcard text token.
 const (
 	TextHandlerKindText   TextHandlerKind = "text"
 	TextHandlerKindButton TextHandlerKind = "button"
-	AnyText                               = "*"
+	// AnyText is the wildcard text-handler key: when registered, it matches
+	// any incoming text message that has no exact handler.
+	AnyText = "*"
 )
 
+// TextHandler matches an incoming text message (literal or via AnyText).
 type TextHandler struct {
 	text        string
 	id          uuid.UUID
@@ -96,17 +101,20 @@ type TextHandler struct {
 	orderWeight int
 }
 
+// AudioHandler matches voice messages.
 type AudioHandler struct {
 	id          uuid.UUID
 	handlerFunc HandlerFunc
 }
 
+// CommandHandler matches a slash command (e.g. "/start").
 type CommandHandler struct {
 	command     string
 	id          uuid.UUID
 	handlerFunc HandlerFunc
 }
 
+// RegisterCommand binds a handler to a slash command (must include the slash).
 func (hl *HandlerLayer) RegisterCommand(command string, handler HandlerFunc) {
 	hl.commandHandler[command] = CommandHandler{
 		command:     command,
@@ -115,6 +123,8 @@ func (hl *HandlerLayer) RegisterCommand(command string, handler HandlerFunc) {
 	}
 }
 
+// RegisterText binds a handler to an exact text message.
+// Pass AnyText as text to match any text message.
 func (hl *HandlerLayer) RegisterText(text string, handler HandlerFunc) {
 	hl.textHandler[text] = TextHandler{
 		text:        text,
@@ -124,6 +134,7 @@ func (hl *HandlerLayer) RegisterText(text string, handler HandlerFunc) {
 	}
 }
 
+// RegisterButton adds a reply-keyboard button. The button text doubles as the match key.
 func (hl *HandlerLayer) RegisterButton(text string, handler HandlerFunc) {
 	hl.textHandler[text] = TextHandler{
 		text:        text,
@@ -134,6 +145,7 @@ func (hl *HandlerLayer) RegisterButton(text string, handler HandlerFunc) {
 	}
 }
 
+// RegisterIButton adds an inline-keyboard button with a callback handler.
 func (hl *HandlerLayer) RegisterIButton(text string, handler HandlerFunc) {
 	id := uuid.New()
 
@@ -146,6 +158,8 @@ func (hl *HandlerLayer) RegisterIButton(text string, handler HandlerFunc) {
 	}
 }
 
+// RegisterIButtonURL adds an inline-keyboard button that opens a URL.
+// No handler is invoked when the user taps it.
 func (hl *HandlerLayer) RegisterIButtonURL(text, url string) {
 	id := uuid.New()
 
@@ -158,6 +172,7 @@ func (hl *HandlerLayer) RegisterIButtonURL(text, url string) {
 	}
 }
 
+// RegisterIButtonSwitch adds an inline-keyboard "switch inline query" button.
 func (hl *HandlerLayer) RegisterIButtonSwitch(text, link string, handler HandlerFunc) {
 	id := uuid.New()
 	hl.buttonHandler[id.String()] = InlineButtonHandler{
@@ -169,6 +184,8 @@ func (hl *HandlerLayer) RegisterIButtonSwitch(text, link string, handler Handler
 	}
 }
 
+// AddText appends a line to the layer's message text.
+// The first call sets the text directly; subsequent calls join with a newline.
 func (hl *HandlerLayer) AddText(text string) {
 	if hl.text == "" {
 		hl.text = text
@@ -206,10 +223,13 @@ func (hl *HandlerLayer) sortedButtonsSlice() []TextHandler {
 	return res
 }
 
+// SetIButtonRowMode lays the inline buttons in a single row, with the last
+// button moved to a row of its own. Useful for an "OK / Cancel" footer.
 func (hl *HandlerLayer) SetIButtonRowMode() {
 	hl.rowMode = true
 }
 
+// RegisterVoice binds a handler to incoming voice messages on this layer.
 func (hl *HandlerLayer) RegisterVoice(handler HandlerFunc) {
 	hl.audioHandler = &AudioHandler{
 		id:          uuid.New(),
