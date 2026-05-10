@@ -10,21 +10,21 @@ import (
 
 type capturingLogger struct{ errs []string }
 
-func (c *capturingLogger) Debug(...any)                      {}
-func (c *capturingLogger) Debugf(string, ...any)             {}
-func (c *capturingLogger) Info(...any)                       {}
-func (c *capturingLogger) Infof(string, ...any)              {}
-func (c *capturingLogger) Warn(...any)                       {}
-func (c *capturingLogger) Warnf(string, ...any)              {}
-func (c *capturingLogger) Error(args ...any)                 { c.errs = append(c.errs, "err") }
-func (c *capturingLogger) Errorf(format string, args ...any) { c.errs = append(c.errs, format) }
+func (c *capturingLogger) Debug(...any)                   {}
+func (c *capturingLogger) Debugf(string, ...any)          {}
+func (c *capturingLogger) Info(...any)                    {}
+func (c *capturingLogger) Infof(string, ...any)           {}
+func (c *capturingLogger) Warn(...any)                    {}
+func (c *capturingLogger) Warnf(string, ...any)           {}
+func (c *capturingLogger) Error(_ ...any)                 { c.errs = append(c.errs, "err") }
+func (c *capturingLogger) Errorf(format string, _ ...any) { c.errs = append(c.errs, format) }
 
 func TestDefaultErrorHandler_LogsErr(t *testing.T) {
 	bot, _ := newTestBot()
-	cap := &capturingLogger{}
-	bot.logger = cap
+	captured := &capturingLogger{}
+	bot.logger = captured
 	bot.defaultErrorHandler(context.Background(), Event{ChatID: 1}, errors.New("boom"))
-	if len(cap.errs) == 0 {
+	if len(captured.errs) == 0 {
 		t.Fatal("error not logged")
 	}
 }

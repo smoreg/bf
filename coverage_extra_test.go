@@ -21,17 +21,20 @@ import (
 func withShortTickers(t *testing.T) func() {
 	t.Helper()
 	origCleaner := cleanerTickInterval.Load()
-	origController := chatControllerTTL.Load()
+	origLockTTL := chatControllerTTL.Load()
+	origSweep := chatControllerSweepInterval.Load()
 	origLoader := loaderTickDelay.Load()
 
 	short := int64(5 * time.Millisecond)
 	cleanerTickInterval.Store(short)
 	chatControllerTTL.Store(short)
+	chatControllerSweepInterval.Store(short)
 	loaderTickDelay.Store(short)
 
 	return func() {
 		cleanerTickInterval.Store(origCleaner)
-		chatControllerTTL.Store(origController)
+		chatControllerTTL.Store(origLockTTL)
+		chatControllerSweepInterval.Store(origSweep)
 		loaderTickDelay.Store(origLoader)
 	}
 }
@@ -251,7 +254,7 @@ func TestLookupCallbackButtonText_NilQuery(t *testing.T) {
 
 // --- noopLogger direct calls (forces statements to be executed) ------------
 
-func TestNoopLogger_Direct(t *testing.T) {
+func TestNoopLogger_Direct(_ *testing.T) {
 	l := noopLogger{}
 	l.Debug("a")
 	l.Debugf("%s", "a")
@@ -330,7 +333,7 @@ func TestRegisterMiddleware_ConcurrentWithDispatch(t *testing.T) {
 
 // --- Stop is safe before Start --------------------------------------------
 
-func TestStop_BeforeStart(t *testing.T) {
+func TestStop_BeforeStart(_ *testing.T) {
 	bot, _ := newTestBot()
 	bot.Stop() // must not panic
 }

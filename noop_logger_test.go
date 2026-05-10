@@ -2,7 +2,7 @@ package bf
 
 import "testing"
 
-func TestNoopLogger_AllMethodsAreSafe(t *testing.T) {
+func TestNoopLogger_AllMethodsAreSafe(_ *testing.T) {
 	var l Logger = noopLogger{}
 	l.Debug("x")
 	l.Debugf("%s", "x")

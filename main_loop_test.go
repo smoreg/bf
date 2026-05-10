@@ -10,18 +10,18 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func TestChatController_LockUnlock(t *testing.T) {
+func TestChatController_TryAcquireRelease(t *testing.T) {
 	c := newChatController(context.Background())
 
-	if c.LockChat(1) {
-		t.Fatal("first lock must succeed")
+	if !c.tryAcquire(1) {
+		t.Fatal("first acquire must succeed")
 	}
-	if !c.LockChat(1) {
-		t.Fatal("second lock on same chat must report busy")
+	if c.tryAcquire(1) {
+		t.Fatal("second acquire on the same chat must report busy")
 	}
-	c.UnlockChat(1)
-	if c.LockChat(1) {
-		t.Fatal("after unlock, lock must succeed again")
+	c.release(1)
+	if !c.tryAcquire(1) {
+		t.Fatal("after release, acquire must succeed again")
 	}
 }
 
@@ -34,10 +34,10 @@ func TestChatController_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if !c.LockChat(42) {
+			if c.tryAcquire(42) {
 				atomic.AddInt64(&locks, 1)
 				time.Sleep(10 * time.Millisecond)
-				c.UnlockChat(42)
+				c.release(42)
 			}
 		}()
 	}
@@ -134,7 +134,7 @@ func TestMainLoop_DropsUnparseableUpdate(t *testing.T) {
 func TestHandleUpdate_BusyChatSkipped(t *testing.T) {
 	bot, _ := newTestBot()
 	c := newChatController(context.Background())
-	c.LockChat(1)
+	c.tryAcquire(1)
 
 	var hit atomic.Int32
 	bot.RegisterCommand("/x", func(_ context.Context, _ Event) error { hit.Add(1); return nil })

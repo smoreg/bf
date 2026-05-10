@@ -10,10 +10,11 @@ import (
 
 func newEmptyLayer() *HandlerLayer {
 	return &HandlerLayer{
-		commandHandler: map[string]CommandHandler{},
-		textHandler:    map[string]TextHandler{},
-		buttonHandler:  map[string]InlineButtonHandler{},
-		ttl:            time.Now().Add(time.Hour),
+		commandHandler:    map[string]CommandHandler{},
+		textHandler:       map[string]TextHandler{},
+		buttonTextHandler: map[string]TextHandler{},
+		buttonHandler:     map[string]InlineButtonHandler{},
+		ttl:               time.Now().Add(time.Hour),
 	}
 }
 

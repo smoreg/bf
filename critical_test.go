@@ -58,7 +58,7 @@ func TestNewEvent_CallbackQuery_NilChatStillOK(t *testing.T) {
 
 // --- handleUpdate: no handler available is logged, not panic ---------------
 
-func TestHandleUpdate_NoHandlerDoesNotPanic(t *testing.T) {
+func TestHandleUpdate_NoHandlerDoesNotPanic(_ *testing.T) {
 	bot, _ := newTestBot()
 
 	// Wipe the default handler so availableHandlerFromLayers returns nil.

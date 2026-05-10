@@ -3,6 +3,7 @@ package bf
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -83,7 +84,8 @@ func newTestBot() (*ChatBotImpl, *mockTelegramAPI) {
 		middlewares:         make([]MiddlewareFunc, 0),
 		logger:              noopLogger{},
 		parseMode:           tgbotapi.ModeHTML,
-		defaultTTL:          24 * 60 * 60 * 1_000_000_000,
+		defaultTTL:          24 * time.Hour,
+		updateConcurrency:   defaultUpdateConcurrency,
 		shutdown:            make(chan struct{}),
 	}
 	bot.defaultHandlerLayer = bot.NewLayer()
