@@ -16,20 +16,23 @@ import (
 
 // withShortTickers temporarily shortens background tickers so loop branches
 // can be exercised in milliseconds. Returns a restore func to defer.
+// Reads/writes go through atomic.Int64 so concurrent goroutines reading the
+// values do not race the test that swaps them back.
 func withShortTickers(t *testing.T) func() {
 	t.Helper()
-	origCleaner := cleanerTickInterval
-	origController := chatControllerTTL
-	origLoader := loaderTickDelay
+	origCleaner := cleanerTickInterval.Load()
+	origController := chatControllerTTL.Load()
+	origLoader := loaderTickDelay.Load()
 
-	cleanerTickInterval = 5 * time.Millisecond
-	chatControllerTTL = 5 * time.Millisecond
-	loaderTickDelay = 5 * time.Millisecond
+	short := int64(5 * time.Millisecond)
+	cleanerTickInterval.Store(short)
+	chatControllerTTL.Store(short)
+	loaderTickDelay.Store(short)
 
 	return func() {
-		cleanerTickInterval = origCleaner
-		chatControllerTTL = origController
-		loaderTickDelay = origLoader
+		cleanerTickInterval.Store(origCleaner)
+		chatControllerTTL.Store(origController)
+		loaderTickDelay.Store(origLoader)
 	}
 }
 
