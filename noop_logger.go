@@ -5,11 +5,11 @@ package bf
 // keeping the library free of mandatory logging dependencies.
 type noopLogger struct{}
 
-func (noopLogger) Debug(...any)          {}
-func (noopLogger) Debugf(string, ...any) {}
-func (noopLogger) Info(...any)           {}
-func (noopLogger) Infof(string, ...any)  {}
-func (noopLogger) Warn(...any)           {}
-func (noopLogger) Warnf(string, ...any)  {}
-func (noopLogger) Error(...any)          {}
-func (noopLogger) Errorf(string, ...any) {}
+func (noopLogger) Debug(args ...any)                 { _ = args }
+func (noopLogger) Debugf(format string, args ...any) { _, _ = format, args }
+func (noopLogger) Info(args ...any)                  { _ = args }
+func (noopLogger) Infof(format string, args ...any)  { _, _ = format, args }
+func (noopLogger) Warn(args ...any)                  { _ = args }
+func (noopLogger) Warnf(format string, args ...any)  { _, _ = format, args }
+func (noopLogger) Error(args ...any)                 { _ = args }
+func (noopLogger) Errorf(format string, args ...any) { _, _ = format, args }

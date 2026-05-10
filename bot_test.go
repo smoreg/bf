@@ -31,12 +31,16 @@ func TestStop_StopsCleaner(t *testing.T) {
 	}
 }
 
-// NewBot itself requires a real Telegram API key (network call),
-// so we cover the post-construction wiring via newTestBot in other tests.
-// This test only exercises the early-failure branch.
+// NewBot itself requires a real Telegram API key. We cover the early-failure
+// branch with an empty key (rejected without a network call) and the success
+// branch via NewBotWithEndpoint against a stub server in coverage_extra_test.go.
 func TestNewBot_InvalidKey(t *testing.T) {
-	if _, err := NewBot(""); err == nil {
+	bot, err := NewBot("")
+	if err == nil {
 		t.Fatal("expected error on empty API key")
+	}
+	if bot != nil {
+		t.Fatal("expected nil bot on error")
 	}
 }
 

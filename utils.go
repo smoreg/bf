@@ -7,7 +7,9 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-const cleanerTickInterval = 10 * time.Minute
+// cleanerTickInterval is the cadence at which the cleaner sweeps expired layers.
+// It is a var (not a const) so tests can shorten it without touching production paths.
+var cleanerTickInterval = 10 * time.Minute
 
 // getAndDeleteLayer atomically returns and deletes the layer for chatID.
 // Combining the two operations under one lock prevents a TOCTOU race
@@ -24,6 +26,18 @@ func (b *ChatBotImpl) getAndDeleteLayer(chatID int64) (*HandlerLayer, bool) {
 	return layer, ok
 }
 
+// sweepExpiredLayers removes every chat layer whose TTL has elapsed.
+// Extracted from cleaner so it can be invoked synchronously from tests.
+func (b *ChatBotImpl) sweepExpiredLayers() {
+	b.layersMutex.Lock()
+	defer b.layersMutex.Unlock()
+	for chatID, layer := range b.chatHandlerLayers {
+		if layer.IsExpired() {
+			delete(b.chatHandlerLayers, chatID)
+		}
+	}
+}
+
 // cleaner periodically removes expired chat layers. Stops when shutdown is closed.
 func (b *ChatBotImpl) cleaner() {
 	ticker := time.NewTicker(cleanerTickInterval)
@@ -34,13 +48,7 @@ func (b *ChatBotImpl) cleaner() {
 		case <-b.shutdown:
 			return
 		case <-ticker.C:
-			b.layersMutex.Lock()
-			for chatID, layer := range b.chatHandlerLayers {
-				if layer.IsExpired() {
-					delete(b.chatHandlerLayers, chatID)
-				}
-			}
-			b.layersMutex.Unlock()
+			b.sweepExpiredLayers()
 		}
 	}
 }
@@ -83,7 +91,11 @@ func (b *ChatBotImpl) buildInlineKeyboard(
 }
 
 func (b *ChatBotImpl) applyMiddlewares(handlerFunc HandlerFunc) HandlerFunc {
-	for _, middleware := range b.middlewares {
+	b.middlewaresMutex.RLock()
+	mws := b.middlewares
+	b.middlewaresMutex.RUnlock()
+
+	for _, middleware := range mws {
 		handlerFunc = middleware(handlerFunc)
 	}
 

@@ -13,13 +13,23 @@ import (
 const maxLoaderTicks = 20
 
 // Start subscribes to Telegram updates and processes them until ctx is cancelled
-// or the updates channel is closed. Register all static handlers before calling Start.
+// or the updates channel is closed. Register all static handlers (commands,
+// inline buttons, middlewares) before calling Start — registering after Start
+// races with the dispatcher.
+//
+// Start always releases its background goroutines on return via Stop, so calling
+// Stop manually after Start is safe but unnecessary.
 func (b *ChatBotImpl) Start(ctx context.Context) error {
 	b.logger.Debugf("starting bot")
 
 	if err := b.validateConfiguration(); err != nil {
 		return fmt.Errorf("failed to validate configuration: %w", err)
 	}
+	if b.tgbot == nil {
+		return errors.New("telegram client is nil; check the error returned by NewBot")
+	}
+
+	defer b.Stop()
 
 	updates := b.tgbot.GetUpdatesChan(tgbotapi.UpdateConfig{
 		Timeout: 60,
@@ -69,7 +79,7 @@ func (b *ChatBotImpl) loaderButtonLoop(ctx context.Context, chatID int64, sentMs
 ) {
 	count := 0
 	fullCount := 0
-	ticker := time.NewTicker(loaderTickDelay * time.Millisecond)
+	ticker := time.NewTicker(loaderTickDelay)
 
 	defer ticker.Stop()
 
@@ -153,7 +163,6 @@ func (b *ChatBotImpl) NewLayer(msgText ...any) *HandlerLayer {
 		audioHandler:        nil,
 		layerDefaultHandler: nil,
 		ttl:                 time.Now().Add(b.defaultTTL),
-		generalMiddlewares:  b.middlewares,
 		rowMode:             false,
 	}
 }
@@ -235,8 +244,11 @@ func (b *ChatBotImpl) RegisterErrorHandler(handler ErrorHandlerFunc) {
 
 // RegisterMiddleware appends a middleware to the chain applied to every handler.
 // Middlewares are applied in registration order (last added runs outermost).
+// Safe to call concurrently with the dispatcher.
 func (b *ChatBotImpl) RegisterMiddleware(middleware MiddlewareFunc) {
+	b.middlewaresMutex.Lock()
 	b.middlewares = append(b.middlewares, middleware)
+	b.middlewaresMutex.Unlock()
 }
 
 // RegisterDefaultHandler sets the fallback handler invoked when no other

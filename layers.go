@@ -25,9 +25,8 @@ type HandlerLayer struct {
 
 	layerDefaultHandler HandlerFunc
 
-	ttl                time.Time
-	generalMiddlewares []MiddlewareFunc
-	rowMode            bool
+	ttl     time.Time
+	rowMode bool
 }
 
 // Handler returns the HandlerFunc that should process the given event,
@@ -73,8 +72,6 @@ func (hl *HandlerLayer) IsEmpty() bool {
 
 // InlineButtonHandler is one inline-keyboard button bound to a handler.
 type InlineButtonHandler struct {
-	text        string
-	id          uuid.UUID
 	handlerFunc HandlerFunc
 	orderWeight int
 	button      tgbotapi.InlineKeyboardButton
@@ -95,7 +92,6 @@ const (
 // TextHandler matches an incoming text message (literal or via AnyText).
 type TextHandler struct {
 	text        string
-	id          uuid.UUID
 	handlerFunc HandlerFunc
 	kind        TextHandlerKind
 	orderWeight int
@@ -103,24 +99,17 @@ type TextHandler struct {
 
 // AudioHandler matches voice messages.
 type AudioHandler struct {
-	id          uuid.UUID
 	handlerFunc HandlerFunc
 }
 
 // CommandHandler matches a slash command (e.g. "/start").
 type CommandHandler struct {
-	command     string
-	id          uuid.UUID
 	handlerFunc HandlerFunc
 }
 
 // RegisterCommand binds a handler to a slash command (must include the slash).
 func (hl *HandlerLayer) RegisterCommand(command string, handler HandlerFunc) {
-	hl.commandHandler[command] = CommandHandler{
-		command:     command,
-		id:          uuid.New(),
-		handlerFunc: handler,
-	}
+	hl.commandHandler[command] = CommandHandler{handlerFunc: handler}
 }
 
 // RegisterText binds a handler to an exact text message.
@@ -128,7 +117,6 @@ func (hl *HandlerLayer) RegisterCommand(command string, handler HandlerFunc) {
 func (hl *HandlerLayer) RegisterText(text string, handler HandlerFunc) {
 	hl.textHandler[text] = TextHandler{
 		text:        text,
-		id:          uuid.New(),
 		handlerFunc: handler,
 		kind:        TextHandlerKindText,
 	}
@@ -138,7 +126,6 @@ func (hl *HandlerLayer) RegisterText(text string, handler HandlerFunc) {
 func (hl *HandlerLayer) RegisterButton(text string, handler HandlerFunc) {
 	hl.textHandler[text] = TextHandler{
 		text:        text,
-		id:          uuid.New(),
 		handlerFunc: handler,
 		kind:        TextHandlerKindButton,
 		orderWeight: len(hl.textHandler),
@@ -147,12 +134,9 @@ func (hl *HandlerLayer) RegisterButton(text string, handler HandlerFunc) {
 
 // RegisterIButton adds an inline-keyboard button with a callback handler.
 func (hl *HandlerLayer) RegisterIButton(text string, handler HandlerFunc) {
-	id := uuid.New()
-
-	hl.buttonHandler[id.String()] = InlineButtonHandler{
-		button:      tgbotapi.NewInlineKeyboardButtonData(text, id.String()),
-		text:        text,
-		id:          id,
+	id := uuid.NewString()
+	hl.buttonHandler[id] = InlineButtonHandler{
+		button:      tgbotapi.NewInlineKeyboardButtonData(text, id),
 		handlerFunc: handler,
 		orderWeight: len(hl.buttonHandler),
 	}
@@ -161,12 +145,9 @@ func (hl *HandlerLayer) RegisterIButton(text string, handler HandlerFunc) {
 // RegisterIButtonURL adds an inline-keyboard button that opens a URL.
 // No handler is invoked when the user taps it.
 func (hl *HandlerLayer) RegisterIButtonURL(text, url string) {
-	id := uuid.New()
-
-	hl.buttonHandler[id.String()] = InlineButtonHandler{
+	id := uuid.NewString()
+	hl.buttonHandler[id] = InlineButtonHandler{
 		button:      tgbotapi.NewInlineKeyboardButtonURL(text, url),
-		text:        text,
-		id:          id,
 		handlerFunc: nil,
 		orderWeight: len(hl.buttonHandler),
 	}
@@ -174,11 +155,9 @@ func (hl *HandlerLayer) RegisterIButtonURL(text, url string) {
 
 // RegisterIButtonSwitch adds an inline-keyboard "switch inline query" button.
 func (hl *HandlerLayer) RegisterIButtonSwitch(text, link string, handler HandlerFunc) {
-	id := uuid.New()
-	hl.buttonHandler[id.String()] = InlineButtonHandler{
+	id := uuid.NewString()
+	hl.buttonHandler[id] = InlineButtonHandler{
 		button:      tgbotapi.NewInlineKeyboardButtonSwitch(text, link),
-		text:        text,
-		id:          id,
 		handlerFunc: handler,
 		orderWeight: len(hl.buttonHandler),
 	}
@@ -231,8 +210,5 @@ func (hl *HandlerLayer) SetIButtonRowMode() {
 
 // RegisterVoice binds a handler to incoming voice messages on this layer.
 func (hl *HandlerLayer) RegisterVoice(handler HandlerFunc) {
-	hl.audioHandler = &AudioHandler{
-		id:          uuid.New(),
-		handlerFunc: handler,
-	}
+	hl.audioHandler = &AudioHandler{handlerFunc: handler}
 }

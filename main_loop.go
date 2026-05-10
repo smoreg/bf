@@ -8,7 +8,9 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-const chatControllerTTL = 1 * time.Minute
+// chatControllerTTL is how long a per-chat lock stays alive before being
+// reclaimed by the background sweeper. Var so tests can shorten it.
+var chatControllerTTL = 1 * time.Minute
 
 // chatController serialises message processing per chat: while one update from
 // a given chat is being handled, subsequent updates from the same chat are
