@@ -69,19 +69,35 @@ type ChatBotImpl struct {
 	defaultHandlerLayer *HandlerLayer
 
 	layersMutex sync.RWMutex
+	// defaultLayerMutex guards mutations on defaultHandlerLayer (the
+	// Register* methods that mutate handler maps, and reads of those maps
+	// from the dispatcher). Per-chat layers are short-lived and not shared
+	// across goroutines after SendMsg, so they need no separate lock.
+	defaultLayerMutex sync.RWMutex
 
 	middlewaresMutex sync.RWMutex
 	middlewares      []MiddlewareFunc
-	errorHandler     ErrorHandlerFunc
-	logger           Logger
 
-	debug      bool
-	parseMode  string
-	defaultTTL time.Duration
+	errorHandlerMutex sync.RWMutex
+	errorHandler      ErrorHandlerFunc
+
+	logger Logger
+
+	debug             bool
+	parseMode         string
+	defaultTTL        time.Duration
+	updateConcurrency int
 
 	// shutdownOnce guards Stop so the cleaner channel is closed exactly once.
 	shutdownOnce sync.Once
 	shutdown     chan struct{}
+}
+
+// getErrorHandler returns the currently registered error handler under a read lock.
+func (b *ChatBotImpl) getErrorHandler() ErrorHandlerFunc {
+	b.errorHandlerMutex.RLock()
+	defer b.errorHandlerMutex.RUnlock()
+	return b.errorHandler
 }
 
 // newSkeleton builds an unwired ChatBotImpl with options applied. The caller
@@ -96,10 +112,14 @@ func newSkeleton(opts []BotOption) *ChatBotImpl {
 		debug:               false,
 		parseMode:           tgbotapi.ModeHTML,
 		defaultTTL:          24 * time.Hour,
+		updateConcurrency:   defaultUpdateConcurrency,
 		shutdown:            make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(chatBot)
+	}
+	if chatBot.updateConcurrency <= 0 {
+		chatBot.updateConcurrency = defaultUpdateConcurrency
 	}
 	return chatBot
 }

@@ -5,19 +5,22 @@ import (
 	"time"
 )
 
-type eventType string
+// EventKind identifies the kind of payload an Event carries.
+type EventKind string
 
 // Recognised event kinds emitted by newEvent.
 const (
-	EventKindText         eventType = "text"
-	EventKindInlineButton eventType = "buttonInline"
-	EventKindCommand      eventType = "command"
-	EventKindVoice        eventType = "audio"
+	EventKindText         EventKind = "text"
+	EventKindInlineButton EventKind = "buttonInline"
+	EventKindCommand      EventKind = "command"
+	EventKindVoice        EventKind = "audio"
 )
 
-// loaderTickDelay is the cadence at which LoaderButton refreshes its placeholder
-// message. Atomic so tests can drive the loop quickly without racing the
-// goroutines that read it.
+// Loader timing.
+//
+// loaderTickDelay is the cadence at which LoaderButton refreshes its
+// placeholder message. Atomic so tests can drive the loop quickly without
+// racing the goroutines that read it.
 var loaderTickDelay atomic.Int64
 
 func init() {

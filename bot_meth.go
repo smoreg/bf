@@ -15,7 +15,7 @@ const maxLoaderTicks = 20
 // Start subscribes to Telegram updates and processes them until ctx is cancelled
 // or the updates channel is closed. Register all static handlers (commands,
 // inline buttons, middlewares) before calling Start — registering after Start
-// races with the dispatcher.
+// is allowed but goes through internal locks and is slightly more expensive.
 //
 // Start always releases its background goroutines on return via Stop, so calling
 // Stop manually after Start is safe but unnecessary.
@@ -54,6 +54,9 @@ func (b *ChatBotImpl) GetFileURL(fileID string) (string, error) {
 //
 // The loader goroutine is also tied to the bot's shutdown signal: calling
 // Stop on the bot cancels every active loader.
+//
+// If the initial Send fails, the loader gives up immediately rather than
+// editing a non-existent message MessageID=0 in a loop.
 func (b *ChatBotImpl) LoaderButton(chatID int64, loadScreen []string) context.CancelFunc {
 	if len(loadScreen) == 0 {
 		b.logger.Errorf("LoaderButton: loadScreen cannot be empty")
@@ -78,6 +81,8 @@ func (b *ChatBotImpl) LoaderButton(chatID int64, loadScreen []string) context.Ca
 		sentMsg, err := b.tgbot.Send(msg)
 		if err != nil {
 			b.logger.Errorf("failed to send loader message: %s", err)
+			cancel()
+			return
 		}
 
 		b.loaderButtonLoop(loaderCtx, chatID, sentMsg, cancel, loadScreen)
@@ -130,7 +135,9 @@ func (b *ChatBotImpl) loaderButtonLoop(ctx context.Context, chatID int64, sentMs
 
 // RegisterIButton attaches an inline-button handler to the default layer.
 func (b *ChatBotImpl) RegisterIButton(btn string, handler HandlerFunc) {
+	b.defaultLayerMutex.Lock()
 	b.defaultHandlerLayer.RegisterIButton(btn, handler)
+	b.defaultLayerMutex.Unlock()
 }
 
 // SelfUserName returns the bot's own Telegram username.
@@ -140,18 +147,25 @@ func (b *ChatBotImpl) SelfUserName() string {
 
 // RegisterButton attaches a reply-keyboard button handler to the default layer.
 func (b *ChatBotImpl) RegisterButton(btn string, handler HandlerFunc) {
+	b.defaultLayerMutex.Lock()
 	b.defaultHandlerLayer.RegisterButton(btn, handler)
+	b.defaultLayerMutex.Unlock()
 }
 
 // RegisterAudio attaches a voice-message handler to the default layer.
 // The Voice payload is exposed via Event.Voice.
 func (b *ChatBotImpl) RegisterAudio(handler HandlerFunc) {
+	b.defaultLayerMutex.Lock()
 	b.defaultHandlerLayer.RegisterVoice(handler)
+	b.defaultLayerMutex.Unlock()
 }
 
 // SendText sends a plain text message without affecting any chat layer.
+// The configured parse mode (WithParseMode) is applied just like in SendMsg.
 func (b *ChatBotImpl) SendText(chatID int64, text string) error {
-	if _, err := b.tgbot.Send(tgbotapi.NewMessage(chatID, text)); err != nil {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = b.parseMode
+	if _, err := b.tgbot.Send(msg); err != nil {
 		return fmt.Errorf("failed to send text: %w", err)
 	}
 	return nil
@@ -172,6 +186,7 @@ func (b *ChatBotImpl) NewLayer(msgText ...any) *HandlerLayer {
 		text:                text,
 		commandHandler:      make(map[string]CommandHandler),
 		textHandler:         make(map[string]TextHandler),
+		buttonTextHandler:   make(map[string]TextHandler),
 		buttonHandler:       make(map[string]InlineButtonHandler),
 		audioHandler:        nil,
 		layerDefaultHandler: nil,
@@ -252,12 +267,17 @@ func (b *ChatBotImpl) RetryLastLayer(event Event, newText string) error {
 // RegisterCommand attaches a slash-command handler to the default layer.
 // command must include the leading slash (e.g. "/start").
 func (b *ChatBotImpl) RegisterCommand(command string, handler HandlerFunc) {
+	b.defaultLayerMutex.Lock()
 	b.defaultHandlerLayer.RegisterCommand(command, handler)
+	b.defaultLayerMutex.Unlock()
 }
 
-// RegisterErrorHandler installs the function called whenever a handler returns an error.
+// RegisterErrorHandler installs the function called whenever a handler returns
+// an error. Safe to call concurrently with the dispatcher.
 func (b *ChatBotImpl) RegisterErrorHandler(handler ErrorHandlerFunc) {
+	b.errorHandlerMutex.Lock()
 	b.errorHandler = handler
+	b.errorHandlerMutex.Unlock()
 }
 
 // RegisterMiddleware appends a middleware to the chain applied to every handler.
@@ -270,9 +290,12 @@ func (b *ChatBotImpl) RegisterMiddleware(middleware MiddlewareFunc) {
 }
 
 // RegisterDefaultHandler sets the fallback handler invoked when no other
-// handler in the active layer matches the incoming event.
+// handler in the active layer matches the incoming event. Safe to call
+// concurrently with the dispatcher.
 func (b *ChatBotImpl) RegisterDefaultHandler(handler HandlerFunc) {
+	b.defaultLayerMutex.Lock()
 	b.defaultHandlerLayer.layerDefaultHandler = handler
+	b.defaultLayerMutex.Unlock()
 }
 
 // findAndWipeChatLayerHandler returns the chat-specific layer (consuming it)

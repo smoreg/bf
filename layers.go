@@ -15,13 +15,24 @@ import (
 //     message from the user, then is wiped.
 //  2. The bot's default layer, used whenever no chat-specific layer is set.
 //     The default layer is never wiped automatically.
+//
+// HandlerLayer itself is not goroutine-safe; mutate it from one goroutine,
+// then hand it off to SendMsg. The bot's default layer mutations are
+// guarded internally by ChatBotImpl.
 type HandlerLayer struct {
 	text string
 
 	commandHandler map[string]CommandHandler
-	textHandler    map[string]TextHandler
-	buttonHandler  map[string]InlineButtonHandler
-	audioHandler   *AudioHandler
+	// textHandler matches incoming text messages — including reply-keyboard
+	// button presses, since Telegram delivers them as plain text.
+	textHandler map[string]TextHandler
+	// buttonTextHandler keeps reply-keyboard buttons separately from generic
+	// text handlers so they can collide explicitly: if RegisterText and
+	// RegisterButton are called with the same key the latter overrides the
+	// former and we log a warning rather than silently merging via one map.
+	buttonTextHandler map[string]TextHandler
+	buttonHandler     map[string]InlineButtonHandler
+	audioHandler      *AudioHandler
 
 	layerDefaultHandler HandlerFunc
 
@@ -34,6 +45,10 @@ type HandlerLayer struct {
 func (hl *HandlerLayer) Handler(event Event) HandlerFunc {
 	switch event.Kind {
 	case EventKindText:
+		// Reply-keyboard buttons match before generic text handlers.
+		if h, ok := hl.buttonTextHandler[event.Text]; ok {
+			return h.handlerFunc
+		}
 		if h, ok := hl.textHandler[event.Text]; ok {
 			return h.handlerFunc
 		}
@@ -65,8 +80,10 @@ func (hl *HandlerLayer) IsExpired() bool {
 // IsEmpty reports whether the layer has no registered handlers at all.
 func (hl *HandlerLayer) IsEmpty() bool {
 	return len(hl.textHandler) == 0 &&
+		len(hl.buttonTextHandler) == 0 &&
 		len(hl.commandHandler) == 0 &&
 		len(hl.buttonHandler) == 0 &&
+		hl.audioHandler == nil &&
 		hl.layerDefaultHandler == nil
 }
 
@@ -123,12 +140,14 @@ func (hl *HandlerLayer) RegisterText(text string, handler HandlerFunc) {
 }
 
 // RegisterButton adds a reply-keyboard button. The button text doubles as the match key.
+// Reply-keyboard buttons are tracked in their own map and take priority over
+// generic RegisterText handlers with the same key.
 func (hl *HandlerLayer) RegisterButton(text string, handler HandlerFunc) {
-	hl.textHandler[text] = TextHandler{
+	hl.buttonTextHandler[text] = TextHandler{
 		text:        text,
 		handlerFunc: handler,
 		kind:        TextHandlerKindButton,
-		orderWeight: len(hl.textHandler),
+		orderWeight: len(hl.buttonTextHandler),
 	}
 }
 
@@ -188,11 +207,9 @@ func (hl *HandlerLayer) sortedIButtonsSlice() []InlineButtonHandler {
 }
 
 func (hl *HandlerLayer) sortedButtonsSlice() []TextHandler {
-	res := make([]TextHandler, 0, len(hl.textHandler))
-	for _, v := range hl.textHandler {
-		if v.kind == TextHandlerKindButton {
-			res = append(res, v)
-		}
+	res := make([]TextHandler, 0, len(hl.buttonTextHandler))
+	for _, v := range hl.buttonTextHandler {
+		res = append(res, v)
 	}
 
 	sort.Slice(res, func(i, j int) bool {

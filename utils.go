@@ -61,14 +61,15 @@ func (b *ChatBotImpl) cleaner() {
 }
 
 func (b *ChatBotImpl) validateConfiguration() error {
-	if b.errorHandler == nil {
+	if b.getErrorHandler() == nil {
 		return errors.New("error handler is not set")
 	}
 
+	b.defaultLayerMutex.RLock()
+	defer b.defaultLayerMutex.RUnlock()
 	if b.defaultHandlerLayer == nil {
 		return errors.New("default handler layer is not set")
 	}
-
 	if b.defaultHandlerLayer.layerDefaultHandler == nil {
 		return errors.New("default handler is not set")
 	}
@@ -109,13 +110,22 @@ func (b *ChatBotImpl) applyMiddlewares(handlerFunc HandlerFunc) HandlerFunc {
 	return handlerFunc
 }
 
+// availableHandlerFromLayers picks the handler that should run for event,
+// preferring the chat-specific layer and falling back to the default layer.
+// The default layer is read under defaultLayerMutex so concurrent Register*
+// calls do not race the dispatcher.
 func (b *ChatBotImpl) availableHandlerFromLayers(event Event, chatLayer, defaultLayer *HandlerLayer) HandlerFunc {
-	handlerFunc := chatLayer.Handler(event)
-	if handlerFunc == nil {
-		handlerFunc = defaultLayer.Handler(event)
+	if chatLayer != nil && chatLayer != defaultLayer {
+		if h := chatLayer.Handler(event); h != nil {
+			return h
+		}
 	}
-
-	return handlerFunc
+	b.defaultLayerMutex.RLock()
+	defer b.defaultLayerMutex.RUnlock()
+	if defaultLayer == nil {
+		return nil
+	}
+	return defaultLayer.Handler(event)
 }
 
 func (b *ChatBotImpl) setLayer(layer *HandlerLayer, chatID int64) {
