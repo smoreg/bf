@@ -1,8 +1,26 @@
-[leaks]
-# Add custom rules or modify existing ones as needed
-files = ["passwords.toml", "secrets.yaml", "*.pem"]
-regexes = [
-"(?i)password",
-"(?i)secret",
-"(?i)apikey"
+# gitleaks v8 configuration. We extend the default rule set rather than
+# replace it — the bundled rules already cover common token shapes.
+title = "bf gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram Bot API token (digits:hash)"
+regex = '''(?i)(bot|telegram)[_-]?token[^A-Za-z0-9]{0,5}[0-9]{6,12}:[A-Za-z0-9_-]{30,}'''
+keywords = ["bottoken", "tg_token", "telegram_token"]
+
+[[rules]]
+id = "raw-telegram-token"
+description = "Bare Telegram bot token shape"
+regex = '''[0-9]{8,12}:[A-Za-z0-9_-]{35}'''
+keywords = [":AAA", ":AAH", ":AAJ"]
+
+[allowlist]
+paths = [
+  "go\\.sum$",
+  "_test\\.go$",
+  "example/",
+  "\\.gitleaks\\.toml$",
 ]
