@@ -3,6 +3,7 @@ package bf
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -20,25 +21,36 @@ type telegramAPI interface {
 }
 
 // realTelegramAPI adapts *tgbotapi.BotAPI to the telegramAPI interface.
-// It exists because BotAPI exposes Self as a struct field, not a method.
+// It exists because BotAPI exposes Self as a struct field, not a method, and
+// because BotAPI.StopReceivingUpdates panics if GetUpdatesChan has not been
+// called yet — we need to guard against that for safe defer-Stop semantics.
 type realTelegramAPI struct {
-	bot *tgbotapi.BotAPI
+	bot      *tgbotapi.BotAPI
+	updating atomic.Bool
 }
 
-func (r realTelegramAPI) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+func (r *realTelegramAPI) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
 	return r.bot.Send(c)
 }
 
-func (r realTelegramAPI) GetUpdatesChan(cfg tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel {
+func (r *realTelegramAPI) GetUpdatesChan(cfg tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel {
+	r.updating.Store(true)
 	return r.bot.GetUpdatesChan(cfg)
 }
 
-func (r realTelegramAPI) GetFileDirectURL(fileID string) (string, error) {
+func (r *realTelegramAPI) GetFileDirectURL(fileID string) (string, error) {
 	return r.bot.GetFileDirectURL(fileID)
 }
 
-func (r realTelegramAPI) StopReceivingUpdates() { r.bot.StopReceivingUpdates() }
-func (r realTelegramAPI) Self() tgbotapi.User   { return r.bot.Self }
+// StopReceivingUpdates is a no-op if GetUpdatesChan was never invoked, since
+// the underlying BotAPI panics on a closed-channel double-close in that case.
+func (r *realTelegramAPI) StopReceivingUpdates() {
+	if r.updating.CompareAndSwap(true, false) {
+		r.bot.StopReceivingUpdates()
+	}
+}
+
+func (r *realTelegramAPI) Self() tgbotapi.User { return r.bot.Self }
 
 // layerTTLForever marks the default layer as effectively non-expiring.
 const layerTTLForever = time.Hour * 24 * 365 * 100
@@ -58,9 +70,10 @@ type ChatBotImpl struct {
 
 	layersMutex sync.RWMutex
 
-	middlewares  []MiddlewareFunc
-	errorHandler ErrorHandlerFunc
-	logger       Logger
+	middlewaresMutex sync.RWMutex
+	middlewares      []MiddlewareFunc
+	errorHandler     ErrorHandlerFunc
+	logger           Logger
 
 	debug      bool
 	parseMode  string
@@ -71,10 +84,9 @@ type ChatBotImpl struct {
 	shutdown     chan struct{}
 }
 
-// NewBot creates a new bot bound to the given Telegram bot API key.
-// Pass functional options (WithLogger, WithDebug, WithParseMode, WithLayerTTL) to customise.
-// The returned bot is not started; call Start to begin processing updates.
-func NewBot(apikey string, opts ...BotOption) (*ChatBotImpl, error) {
+// newSkeleton builds an unwired ChatBotImpl with options applied. The caller
+// is responsible for attaching a telegramAPI and starting background goroutines.
+func newSkeleton(opts []BotOption) *ChatBotImpl {
 	chatBot := &ChatBotImpl{
 		chatHandlerLayers:   make(map[int64]*HandlerLayer),
 		defaultHandlerLayer: nil,
@@ -89,21 +101,52 @@ func NewBot(apikey string, opts ...BotOption) (*ChatBotImpl, error) {
 	for _, opt := range opts {
 		opt(chatBot)
 	}
+	return chatBot
+}
 
+// finalise wires defaults and starts background goroutines after a telegramAPI
+// has been attached. Shared by NewBot and NewBotWithEndpoint.
+func (b *ChatBotImpl) finalise() {
+	b.defaultHandlerLayer = b.NewLayer()
+	b.defaultHandlerLayer.ttl = time.Now().Add(layerTTLForever)
+	b.RegisterErrorHandler(b.defaultErrorHandler)
+	b.RegisterDefaultHandler(b.defaultEventHandler)
+
+	go b.cleaner()
+}
+
+// NewBot creates a new bot bound to the given Telegram bot API key, talking to
+// the public Telegram Bot API. Pass functional options (WithLogger, WithDebug,
+// WithParseMode, WithLayerTTL) to customise. The returned bot is not started;
+// call Start to begin processing updates.
+//
+// On error the returned *ChatBotImpl is nil — always check err.
+func NewBot(apikey string, opts ...BotOption) (*ChatBotImpl, error) {
 	bot, err := tgbotapi.NewBotAPI(apikey)
 	if err != nil {
-		return chatBot, fmt.Errorf("failed to create bot: %w", err)
+		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
-	chatBot.tgbot = realTelegramAPI{bot: bot}
+	chatBot := newSkeleton(opts)
+	chatBot.tgbot = &realTelegramAPI{bot: bot}
+	chatBot.finalise()
+	return chatBot, nil
+}
 
-	chatBot.defaultHandlerLayer = chatBot.NewLayer()
-	chatBot.defaultHandlerLayer.ttl = time.Now().Add(layerTTLForever)
-	chatBot.RegisterErrorHandler(chatBot.defaultErrorHandler)
-	chatBot.RegisterDefaultHandler(chatBot.defaultEventHandler)
+// NewBotWithEndpoint behaves like NewBot but routes API calls through the
+// supplied endpoint template. The template must contain two %s placeholders
+// (one for the token, one for the method) — see tgbotapi.APIEndpoint for the
+// canonical format. Useful for self-hosted Telegram Bot API servers and for
+// integration tests against a fake server.
+func NewBotWithEndpoint(apikey, endpoint string, opts ...BotOption) (*ChatBotImpl, error) {
+	bot, err := tgbotapi.NewBotAPIWithAPIEndpoint(apikey, endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bot: %w", err)
+	}
 
-	go chatBot.cleaner()
-
+	chatBot := newSkeleton(opts)
+	chatBot.tgbot = &realTelegramAPI{bot: bot}
+	chatBot.finalise()
 	return chatBot, nil
 }
 

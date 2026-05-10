@@ -3,12 +3,22 @@ package bf
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-const chatControllerTTL = 1 * time.Minute
+// chatControllerTTL is how long a per-chat lock stays alive before being
+// reclaimed by the background sweeper. Atomic so tests can shorten it without
+// racing the sweeper goroutine.
+var chatControllerTTL atomic.Int64
+
+func init() {
+	chatControllerTTL.Store(int64(1 * time.Minute))
+}
+
+func chatControllerTick() time.Duration { return time.Duration(chatControllerTTL.Load()) }
 
 // chatController serialises message processing per chat: while one update from
 // a given chat is being handled, subsequent updates from the same chat are
@@ -20,7 +30,8 @@ type chatController struct {
 
 // cleanOld evicts stale chat locks. Stops when ctx is cancelled.
 func (c chatController) cleanOld(ctx context.Context) {
-	ticker := time.NewTicker(chatControllerTTL)
+	tick := chatControllerTick()
+	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 
 	for {
@@ -30,7 +41,7 @@ func (c chatController) cleanOld(ctx context.Context) {
 		case <-ticker.C:
 			c.mux.Lock()
 			for userID, lastTime := range c.userInWork {
-				if lastTime.Add(chatControllerTTL).Before(time.Now()) {
+				if lastTime.Add(tick).Before(time.Now()) {
 					delete(c.userInWork, userID)
 				}
 			}
@@ -72,7 +83,13 @@ func newChatController(ctx context.Context) chatController {
 }
 
 func (b *ChatBotImpl) mainLoop(ctx context.Context, updates tgbotapi.UpdatesChannel) error {
-	control := newChatController(ctx)
+	// Derive a child context so chatController.cleanOld is guaranteed to
+	// terminate even if mainLoop exits because the updates channel closed
+	// (rather than because ctx was cancelled).
+	loopCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	control := newChatController(loopCtx)
 
 	for {
 		select {
@@ -82,7 +99,7 @@ func (b *ChatBotImpl) mainLoop(ctx context.Context, updates tgbotapi.UpdatesChan
 			if !ok {
 				return nil
 			}
-			go b.handleUpdate(ctx, control, update)
+			go b.handleUpdate(loopCtx, control, update)
 		}
 	}
 }
@@ -109,6 +126,14 @@ func (b *ChatBotImpl) handleUpdate(ctx context.Context, control chatController, 
 	event.lastLayer = layer
 
 	handlerFunc := b.availableHandlerFromLayers(event, layer, b.defaultHandlerLayer)
+	if handlerFunc == nil {
+		// Both the chat layer and the default layer returned nil. This happens
+		// when a URL-only inline button is somehow tapped, or when the user
+		// cleared the default handler at runtime. Drop the event with a log
+		// rather than panicking on a nil call.
+		b.logger.Debugf("no handler for event: %#v", event)
+		return
+	}
 
 	if err := b.applyMiddlewares(handlerFunc)(ctx, event); err != nil {
 		b.errorHandler(ctx, event, err)

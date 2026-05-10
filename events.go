@@ -45,7 +45,9 @@ func (e *Event) FullName() string {
 }
 
 // newEvent normalises a tgbotapi.Update into an Event.
-// Returns ok=false if the update carries no payload the framework understands.
+// Returns ok=false if the update carries no payload the framework understands
+// or if a required nested field (Message.Chat, CallbackQuery.Message.Chat) is
+// missing — those updates cannot be replied to.
 func newEvent(update tgbotapi.Update) (Event, bool) {
 	event := Event{}
 
@@ -53,17 +55,26 @@ func newEvent(update tgbotapi.Update) (Event, bool) {
 
 	switch {
 	case update.Message != nil && update.Message.Voice != nil:
+		if update.Message.Chat == nil {
+			return event, false
+		}
 		event.Kind = EventKindVoice
 		event.Voice = update.Message.Voice
 		event.ChatID = update.Message.Chat.ID
 		from = update.Message.From
 	case update.Message != nil && update.Message.IsCommand():
+		if update.Message.Chat == nil {
+			return event, false
+		}
 		event.Kind = EventKindCommand
 		event.Command = update.Message.Command()
 		event.ChatID = update.Message.Chat.ID
 		event.CommandArguments = update.Message.CommandArguments()
 		from = update.Message.From
 	case update.Message != nil:
+		if update.Message.Chat == nil {
+			return event, false
+		}
 		event.Kind = EventKindText
 		event.Text = update.Message.Text
 		event.ChatID = update.Message.Chat.ID
@@ -73,7 +84,7 @@ func newEvent(update tgbotapi.Update) (Event, bool) {
 		event.Button = update.CallbackQuery.Data
 		event.ButtonText = lookupCallbackButtonText(update.CallbackQuery)
 
-		if update.CallbackQuery.Message != nil {
+		if update.CallbackQuery.Message != nil && update.CallbackQuery.Message.Chat != nil {
 			event.ChatID = update.CallbackQuery.Message.Chat.ID
 		}
 		from = update.CallbackQuery.From

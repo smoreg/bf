@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `NewBotWithEndpoint(apikey, endpoint, opts...)` for self-hosted Telegram Bot
+  API servers and integration tests against fake servers.
+- `Stop()` is now safe to call before `Start()` and is invoked automatically
+  when `Start()` returns, so callers no longer have to remember to defer it.
+
+### Changed
+- **Breaking**: `NewBot` now returns `(nil, err)` on failure instead of a
+  partially-initialised bot. Callers that ignored the error and used the
+  returned struct anyway need to add an `if err != nil` check.
+- `RegisterMiddleware` is now safe to call concurrently with the dispatcher.
+- Background-loop tickers are stored in `atomic.Int64` package vars so tests
+  can shorten them without racing the goroutines that read them.
+- Pruned dead fields (`generalMiddlewares`, unused `id`/`text` on handler
+  structs); switched `uuid.UUID` to `uuid.NewString()` to drop a tiny dep edge.
+
+### Fixed
+- `realTelegramAPI.StopReceivingUpdates` no longer panics when called before
+  `GetUpdatesChan`. This made `Stop()` unsafe in tests and after a failed
+  `Start()`.
+- `Start()` now defers `Stop()` so background goroutines (`cleaner`) actually
+  stop when `Start` returns due to context cancellation.
+- `newEvent` rejects updates whose `Message.Chat` is nil instead of panicking.
+- `handleUpdate` drops events with no matching handler with a debug log
+  instead of dispatching `nil` (which panics inside the middleware chain).
+- `SendMsg(chatID, nil)` returns an error rather than dereferencing a nil
+  layer.
+- `LoaderButton` goroutines now terminate when `Stop()` is called — they
+  used to keep running until their individual cancel was invoked.
+- `mainLoop` now derives a child context for `chatController.cleanOld`, so
+  the sweeper terminates even if the loop exits because the updates channel
+  closed (not because ctx was cancelled).
+
 ## [0.1.0] - 2026-05-09
 
 ### Added
