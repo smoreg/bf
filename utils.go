@@ -2,14 +2,21 @@ package bf
 
 import (
 	"errors"
+	"sync/atomic"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // cleanerTickInterval is the cadence at which the cleaner sweeps expired layers.
-// It is a var (not a const) so tests can shorten it without touching production paths.
-var cleanerTickInterval = 10 * time.Minute
+// Atomic so tests can shorten it without racing the goroutines that read it.
+var cleanerTickInterval atomic.Int64
+
+func init() {
+	cleanerTickInterval.Store(int64(10 * time.Minute))
+}
+
+func cleanerTick() time.Duration { return time.Duration(cleanerTickInterval.Load()) }
 
 // getAndDeleteLayer atomically returns and deletes the layer for chatID.
 // Combining the two operations under one lock prevents a TOCTOU race
@@ -40,7 +47,7 @@ func (b *ChatBotImpl) sweepExpiredLayers() {
 
 // cleaner periodically removes expired chat layers. Stops when shutdown is closed.
 func (b *ChatBotImpl) cleaner() {
-	ticker := time.NewTicker(cleanerTickInterval)
+	ticker := time.NewTicker(cleanerTick())
 	defer ticker.Stop()
 
 	for {

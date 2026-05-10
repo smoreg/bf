@@ -51,6 +51,9 @@ func (b *ChatBotImpl) GetFileURL(fileID string) (string, error) {
 // LoaderButton sends a placeholder message and animates it by editing the
 // message text to successive entries of loadScreen, until the returned cancel
 // function is called or maxLoaderTicks ticks elapse. Always defer cancel().
+//
+// The loader goroutine is also tied to the bot's shutdown signal: calling
+// Stop on the bot cancels every active loader.
 func (b *ChatBotImpl) LoaderButton(chatID int64, loadScreen []string) context.CancelFunc {
 	if len(loadScreen) == 0 {
 		b.logger.Errorf("LoaderButton: loadScreen cannot be empty")
@@ -58,6 +61,16 @@ func (b *ChatBotImpl) LoaderButton(chatID int64, loadScreen []string) context.Ca
 	}
 
 	loaderCtx, cancel := context.WithCancel(context.Background())
+
+	// Bridge the bot's shutdown channel into the loader's context so Stop
+	// terminates loaders without the caller having to hold every cancel.
+	go func() {
+		select {
+		case <-loaderCtx.Done():
+		case <-b.shutdown:
+			cancel()
+		}
+	}()
 
 	go func() {
 		msg := tgbotapi.NewMessage(chatID, loadScreen[0])
@@ -79,7 +92,7 @@ func (b *ChatBotImpl) loaderButtonLoop(ctx context.Context, chatID int64, sentMs
 ) {
 	count := 0
 	fullCount := 0
-	ticker := time.NewTicker(loaderTickDelay)
+	ticker := time.NewTicker(loaderTick())
 
 	defer ticker.Stop()
 
@@ -169,7 +182,12 @@ func (b *ChatBotImpl) NewLayer(msgText ...any) *HandlerLayer {
 
 // SendMsg renders the layer (text + buttons), sends it to the chat and
 // installs the layer as the next-message expectation for chatID.
+// Returns an error if layer is nil.
 func (b *ChatBotImpl) SendMsg(chatID int64, layer *HandlerLayer) error {
+	if layer == nil {
+		return errors.New("SendMsg: layer is nil")
+	}
+
 	message := tgbotapi.NewMessage(chatID, layer.text)
 	sortedIButtonsSlice := layer.sortedIButtonsSlice()
 	rawIButtons := make([]tgbotapi.InlineKeyboardButton, 0, len(sortedIButtonsSlice))

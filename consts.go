@@ -1,6 +1,9 @@
 package bf
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 type eventType string
 
@@ -13,5 +16,12 @@ const (
 )
 
 // loaderTickDelay is the cadence at which LoaderButton refreshes its placeholder
-// message. Var (not const) so tests can drive the loop quickly.
-var loaderTickDelay = 2 * time.Second
+// message. Atomic so tests can drive the loop quickly without racing the
+// goroutines that read it.
+var loaderTickDelay atomic.Int64
+
+func init() {
+	loaderTickDelay.Store(int64(2 * time.Second))
+}
+
+func loaderTick() time.Duration { return time.Duration(loaderTickDelay.Load()) }
