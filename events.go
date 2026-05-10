@@ -7,7 +7,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Event is a struct that represents event from telegram.
+// Event is a normalised representation of a Telegram update consumed by handlers.
 type Event struct {
 	Kind             eventType `json:"kind"`
 	Text             string    `json:"text"`
@@ -25,6 +25,7 @@ type Event struct {
 	Voice            *tgbotapi.Voice `json:"-"`
 }
 
+// String renders the event in Go syntax for debug logging.
 func (e *Event) String() string {
 	return fmt.Sprintf("%#v\n", e)
 }
@@ -38,11 +39,13 @@ func (e *Event) json() (string, error) {
 	return string(ind), nil
 }
 
+// FullName returns "FirstName LastName" with a single separating space.
 func (e *Event) FullName() string {
 	return e.FirstName + " " + e.LastName
 }
 
-// newEvent creates new event from tg api update object.
+// newEvent normalises a tgbotapi.Update into an Event.
+// Returns ok=false if the update carries no payload the framework understands.
 func newEvent(update tgbotapi.Update) (Event, bool) {
 	event := Event{}
 
@@ -68,33 +71,44 @@ func newEvent(update tgbotapi.Update) (Event, bool) {
 	case update.CallbackQuery != nil:
 		event.Kind = EventKindInlineButton
 		event.Button = update.CallbackQuery.Data
-	L:
-		for _, row := range update.CallbackQuery.Message.ReplyMarkup.InlineKeyboard {
-			for _, button := range row {
-				if button.CallbackData == nil {
-					continue
-				}
-				data := *button.CallbackData
-				if data == update.CallbackQuery.Data {
-					event.ButtonText = button.Text
+		event.ButtonText = lookupCallbackButtonText(update.CallbackQuery)
 
-					break L
-				}
-			}
+		if update.CallbackQuery.Message != nil {
+			event.ChatID = update.CallbackQuery.Message.Chat.ID
 		}
-
-		event.ChatID = update.CallbackQuery.Message.Chat.ID
 		from = update.CallbackQuery.From
 
 	default:
 		return event, false
 	}
 
-	event.UserTGID = from.ID
-	event.FirstName = from.FirstName
-	event.LastName = from.LastName
-	event.Username = from.UserName
-	event.UserTgUsername = from.UserName
+	if from != nil {
+		event.UserTGID = from.ID
+		event.FirstName = from.FirstName
+		event.LastName = from.LastName
+		event.Username = from.UserName
+		event.UserTgUsername = from.UserName
+	}
 
 	return event, true
+}
+
+// lookupCallbackButtonText finds the button label that produced the callback
+// by walking the inline-keyboard markup. Safe against nil Message / ReplyMarkup.
+func lookupCallbackButtonText(q *tgbotapi.CallbackQuery) string {
+	if q == nil || q.Message == nil || q.Message.ReplyMarkup == nil {
+		return ""
+	}
+
+	for _, row := range q.Message.ReplyMarkup.InlineKeyboard {
+		for _, button := range row {
+			if button.CallbackData == nil {
+				continue
+			}
+			if *button.CallbackData == q.Data {
+				return button.Text
+			}
+		}
+	}
+	return ""
 }

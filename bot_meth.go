@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -11,12 +12,12 @@ import (
 
 const maxLoaderTicks = 20
 
-// Start starts bot.
+// Start subscribes to Telegram updates and processes them until ctx is cancelled
+// or the updates channel is closed. Register all static handlers before calling Start.
 func (b *ChatBotImpl) Start(ctx context.Context) error {
 	b.logger.Debugf("starting bot")
 
-	err := b.validateConfiguration()
-	if err != nil {
+	if err := b.validateConfiguration(); err != nil {
 		return fmt.Errorf("failed to validate configuration: %w", err)
 	}
 
@@ -27,7 +28,7 @@ func (b *ChatBotImpl) Start(ctx context.Context) error {
 	return b.mainLoop(ctx, updates)
 }
 
-// GetFileURL returns direct url to telegram file.
+// GetFileURL resolves a Telegram fileID to a directly downloadable URL.
 func (b *ChatBotImpl) GetFileURL(fileID string) (string, error) {
 	url, err := b.tgbot.GetFileDirectURL(fileID)
 	if err != nil {
@@ -37,11 +38,9 @@ func (b *ChatBotImpl) GetFileURL(fileID string) (string, error) {
 	return url, nil
 }
 
-// LoaderButton creates loader button.
-// Loader button is a button that will be shown while some long operation is in progress by editing last message with
-// texts from loadScreen.
-// !!! WARNING !!!
-// Don't forget to call cancel() when operation is finished.
+// LoaderButton sends a placeholder message and animates it by editing the
+// message text to successive entries of loadScreen, until the returned cancel
+// function is called or maxLoaderTicks ticks elapse. Always defer cancel().
 func (b *ChatBotImpl) LoaderButton(chatID int64, loadScreen []string) context.CancelFunc {
 	if len(loadScreen) == 0 {
 		b.logger.Errorf("LoaderButton: loadScreen cannot be empty")
@@ -96,7 +95,7 @@ func (b *ChatBotImpl) loaderButtonLoop(ctx context.Context, chatID int64, sentMs
 			}
 
 			count %= len(loadScreen)
-			if len(loadScreen) != 1 { // don't edit message if there is only one screen
+			if len(loadScreen) != 1 {
 				msg := tgbotapi.NewEditMessageText(chatID, sentMsg.MessageID, loadScreen[count])
 				if _, err := b.tgbot.Send(msg); err != nil {
 					b.logger.Errorf("failed to send loader message: %s", err)
@@ -106,57 +105,61 @@ func (b *ChatBotImpl) loaderButtonLoop(ctx context.Context, chatID int64, sentMs
 	}
 }
 
-// RegisterIButton registers a new inline button with the given text and handler function.
-// btn - text to be displayed on the button.
-// handler - function to be called when the button is pressed.
+// RegisterIButton attaches an inline-button handler to the default layer.
 func (b *ChatBotImpl) RegisterIButton(btn string, handler HandlerFunc) {
 	b.defaultHandlerLayer.RegisterIButton(btn, handler)
 }
 
-// SelfUserName returns bot username.
+// SelfUserName returns the bot's own Telegram username.
 func (b *ChatBotImpl) SelfUserName() string {
-	return b.tgbot.Self.UserName
+	return b.tgbot.Self().UserName
 }
 
-// RegisterButton registers a new button with the given text and handler function.
+// RegisterButton attaches a reply-keyboard button handler to the default layer.
 func (b *ChatBotImpl) RegisterButton(btn string, handler HandlerFunc) {
 	b.defaultHandlerLayer.RegisterButton(btn, handler)
 }
 
-// RegisterAudio registers a handler for Voice msg. Voice will be added as file to Event.
+// RegisterAudio attaches a voice-message handler to the default layer.
+// The Voice payload is exposed via Event.Voice.
 func (b *ChatBotImpl) RegisterAudio(handler HandlerFunc) {
 	b.defaultHandlerLayer.RegisterVoice(handler)
 }
 
-// SendText sends simple text to chat. Doesn't affect any layers.
+// SendText sends a plain text message without affecting any chat layer.
 func (b *ChatBotImpl) SendText(chatID int64, text string) error {
-	_, err := b.tgbot.Send(tgbotapi.NewMessage(chatID, text))
-	if err != nil {
+	if _, err := b.tgbot.Send(tgbotapi.NewMessage(chatID, text)); err != nil {
 		return fmt.Errorf("failed to send text: %w", err)
 	}
 	return nil
 }
 
-// NewLayer creates new layer. Layer is a set of handlers for different types of events.
-// msgText - text that will be sent to user when layer is activated via `SendMsg` method.
+// NewLayer constructs a fresh layer carrying optional message text.
+// The layer is not yet bound to any chat — pass it to SendMsg to install it.
+// msgText is joined with a single space; an empty msgText yields an empty text.
 func (b *ChatBotImpl) NewLayer(msgText ...any) *HandlerLayer {
 	b.logger.Debugf("creating new layer")
 
+	var text string
+	if len(msgText) > 0 {
+		text = strings.TrimRight(fmt.Sprintln(msgText...), "\n")
+	}
+
 	return &HandlerLayer{
-		text:                fmt.Sprintln(msgText...),
+		text:                text,
 		commandHandler:      make(map[string]CommandHandler),
 		textHandler:         make(map[string]TextHandler),
 		buttonHandler:       make(map[string]InlineButtonHandler),
 		audioHandler:        nil,
 		layerDefaultHandler: nil,
-		ttl:                 time.Now().Add(time.Hour * 24),
+		ttl:                 time.Now().Add(b.defaultTTL),
 		generalMiddlewares:  b.middlewares,
 		rowMode:             false,
 	}
 }
 
-// SendMsg sends layer to chat with given ID. Text and buttons will be sent, and layer will be set as current layer
-// for chatID.
+// SendMsg renders the layer (text + buttons), sends it to the chat and
+// installs the layer as the next-message expectation for chatID.
 func (b *ChatBotImpl) SendMsg(chatID int64, layer *HandlerLayer) error {
 	message := tgbotapi.NewMessage(chatID, layer.text)
 	sortedIButtonsSlice := layer.sortedIButtonsSlice()
@@ -189,8 +192,7 @@ func (b *ChatBotImpl) SendMsg(chatID int64, layer *HandlerLayer) error {
 
 	message.ParseMode = b.parseMode
 
-	_, err := b.tgbot.Send(message)
-	if err != nil {
+	if _, err := b.tgbot.Send(message); err != nil {
 		return fmt.Errorf("failed to send message: %w", err)
 	}
 
@@ -199,8 +201,9 @@ func (b *ChatBotImpl) SendMsg(chatID int64, layer *HandlerLayer) error {
 	return nil
 }
 
-// RetryLastLayer sends previous layer to chat with given ID. If newText is not empty, it will be used instead of
-// previous layer text.
+// RetryLastLayer re-sends the layer that was active during the previous
+// message in the chat. If newText is non-empty it overrides the layer's
+// text without mutating the original layer.
 func (b *ChatBotImpl) RetryLastLayer(event Event, newText string) error {
 	previousLayer := event.lastLayer
 
@@ -209,33 +212,41 @@ func (b *ChatBotImpl) RetryLastLayer(event Event, newText string) error {
 	}
 
 	if newText != "" {
-		previousLayer.text = newText
+		// Copy the layer before mutation: another goroutine may still hold
+		// a pointer to the original (e.g. the default layer).
+		layerCopy := *previousLayer
+		layerCopy.text = newText
+		previousLayer = &layerCopy
 	}
 
 	return b.SendMsg(event.ChatID, previousLayer)
 }
 
-// RegisterCommand registers a new command with the given name and handler function.
+// RegisterCommand attaches a slash-command handler to the default layer.
+// command must include the leading slash (e.g. "/start").
 func (b *ChatBotImpl) RegisterCommand(command string, handler HandlerFunc) {
 	b.defaultHandlerLayer.RegisterCommand(command, handler)
 }
 
-// RegisterErrorHandler registers a new error handler.
+// RegisterErrorHandler installs the function called whenever a handler returns an error.
 func (b *ChatBotImpl) RegisterErrorHandler(handler ErrorHandlerFunc) {
 	b.errorHandler = handler
 }
 
-// RegisterMiddleware registers a new middleware.
+// RegisterMiddleware appends a middleware to the chain applied to every handler.
+// Middlewares are applied in registration order (last added runs outermost).
 func (b *ChatBotImpl) RegisterMiddleware(middleware MiddlewareFunc) {
 	b.middlewares = append(b.middlewares, middleware)
 }
 
-// RegisterDefaultHandler registers a new default handler.
+// RegisterDefaultHandler sets the fallback handler invoked when no other
+// handler in the active layer matches the incoming event.
 func (b *ChatBotImpl) RegisterDefaultHandler(handler HandlerFunc) {
 	b.defaultHandlerLayer.layerDefaultHandler = handler
 }
 
-// findAndWipeChatLayerHandler finds layer for chatID and deletes it from layers map.
+// findAndWipeChatLayerHandler returns the chat-specific layer (consuming it)
+// or the default layer when no chat-specific layer is installed.
 func (b *ChatBotImpl) findAndWipeChatLayerHandler(chatID int64) *HandlerLayer {
 	layer, ok := b.getAndDeleteLayer(chatID)
 	if !ok {
