@@ -1,3 +1,5 @@
+// Package main is the jokeBot example for bf — a multi-step dialogue with
+// inline buttons, reply text and RetryLastLayer.
 package main
 
 import (
@@ -26,7 +28,7 @@ func main() {
 	}
 	defer bot.Stop()
 
-	srv := Service{bot, fakeJokeRepo{}}
+	srv := &Service{botFrame: bot, repo: &fakeJokeRepo{}}
 	bot.RegisterCommand("/start", srv.start())
 	bot.RegisterCommand("/help", srv.help("example for help command"))
 	bot.RegisterDefaultHandler(srv.help("unknown action"))
@@ -36,6 +38,9 @@ func main() {
 
 	if err := bot.Start(ctx); err != nil && ctx.Err() == nil {
 		logger.Error("bot stopped with error", slog.Any("err", err))
+		cancel()
+		bot.Stop()
+		// nolint:gocritic // we have already run all defers we care about
 		os.Exit(1)
 	}
 }
