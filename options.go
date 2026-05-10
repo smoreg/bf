@@ -33,10 +33,26 @@ func WithParseMode(parseMode string) BotOption {
 
 // WithLayerTTL overrides how long a chat-specific layer stays active before
 // being garbage-collected by the cleaner. Default is 24 hours.
+//
+// A non-positive d is logged at error level and ignored so the bot keeps
+// running with the default TTL rather than installing a layer that expires
+// in the past on first sweep.
 func WithLayerTTL(d time.Duration) BotOption {
 	return func(bot *ChatBotImpl) {
-		if d > 0 {
-			bot.defaultTTL = d
+		if d <= 0 {
+			bot.logger.Errorf("WithLayerTTL: non-positive duration %v ignored", d)
+			return
+		}
+		bot.defaultTTL = d
+	}
+}
+
+// WithUpdateConcurrency caps how many updates are processed in parallel.
+// Negative or zero values fall back to the package default.
+func WithUpdateConcurrency(n int) BotOption {
+	return func(bot *ChatBotImpl) {
+		if n > 0 {
+			bot.updateConcurrency = n
 		}
 	}
 }

@@ -9,7 +9,7 @@ import (
 
 // Event is a normalised representation of a Telegram update consumed by handlers.
 type Event struct {
-	Kind             eventType `json:"kind"`
+	Kind             EventKind `json:"kind"`
 	Text             string    `json:"text"`
 	Command          string    `json:"command"`
 	Button           string    `json:"button"`
@@ -18,7 +18,6 @@ type Event struct {
 	UserTGID         int64     `json:"userTGID"`
 	FirstName        string    `json:"firstName"`
 	LastName         string    `json:"lastName"`
-	UserTgUsername   string    `json:"userTgUsername"`
 	CommandArguments string    `json:"commandArguments"`
 	Username         string    `json:"username"`
 	lastLayer        *HandlerLayer
@@ -26,8 +25,9 @@ type Event struct {
 }
 
 // String renders the event in Go syntax for debug logging.
+// No trailing newline (unlike fmt.Sprintln) so the standard fmt.Stringer contract holds.
 func (e *Event) String() string {
-	return fmt.Sprintf("%#v\n", e)
+	return fmt.Sprintf("%#v", e)
 }
 
 func (e *Event) json() (string, error) {
@@ -98,7 +98,6 @@ func newEvent(update tgbotapi.Update) (Event, bool) {
 		event.FirstName = from.FirstName
 		event.LastName = from.LastName
 		event.Username = from.UserName
-		event.UserTgUsername = from.UserName
 	}
 
 	return event, true

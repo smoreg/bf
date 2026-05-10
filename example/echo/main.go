@@ -5,7 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,14 +14,18 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
 	token := os.Getenv("TEST_TGBOT_API_KEY")
 	if token == "" {
-		log.Fatal("TEST_TGBOT_API_KEY is not set")
+		logger.Error("TEST_TGBOT_API_KEY is not set")
+		os.Exit(1)
 	}
 
 	bot, err := bf.NewBot(token)
 	if err != nil {
-		log.Fatalf("create bot: %v", err)
+		logger.Error("create bot", slog.Any("err", err))
+		os.Exit(1)
 	}
 	defer bot.Stop()
 
@@ -33,6 +37,10 @@ func main() {
 	defer cancel()
 
 	if err := bot.Start(ctx); err != nil && ctx.Err() == nil {
-		log.Fatalf("bot stopped: %v", err)
+		logger.Error("bot stopped", slog.Any("err", err))
+		cancel()
+		bot.Stop()
+		// nolint:gocritic // we have already run all defers we care about
+		os.Exit(1)
 	}
 }

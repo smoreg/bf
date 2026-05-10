@@ -8,19 +8,22 @@ import (
 	"github.com/smoreg/bf"
 )
 
+// Service holds the bot facade and the joke repo. The repo is a pointer so
+// SaveJoke (which is a pointer-receiver) appends to a single shared instance
+// rather than to a per-call copy.
 type Service struct {
 	botFrame bf.ChatBot
-	repo     fakeJokeRepo
+	repo     *fakeJokeRepo
 }
 
-func (s Service) start() bf.HandlerFunc {
-	return func(ctx context.Context, event bf.Event) error {
+func (s *Service) start() bf.HandlerFunc {
+	return func(_ context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
-		layer.AddText("Hi! Type or choose you name")
+		layer.AddText("Hi! Type or choose your name")
 		layer.RegisterIButton("John", s.processName())
 		layer.RegisterIButton("Mike", s.processName())
 		layer.RegisterIButton("Bob", s.processName())
-		layer.RegisterText("Hitler", s.processBannedName())
+		layer.RegisterText("Voldemort", s.processBannedName())
 		layer.RegisterText(bf.AnyText, s.processName())
 
 		err := s.botFrame.SendMsg(event.ChatID, layer)
@@ -32,8 +35,8 @@ func (s Service) start() bf.HandlerFunc {
 	}
 }
 
-func (s Service) help(inp string) bf.HandlerFunc {
-	return func(ctx context.Context, event bf.Event) error {
+func (s *Service) help(inp string) bf.HandlerFunc {
+	return func(_ context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
 		if inp == "how to write jokes?" {
 			layer.AddText("You can write jokes like this:")
@@ -63,7 +66,7 @@ func (s Service) help(inp string) bf.HandlerFunc {
 	}
 }
 
-func (s Service) processName() bf.HandlerFunc {
+func (s *Service) processName() bf.HandlerFunc {
 	return func(ctx context.Context, event bf.Event) error {
 		name, err := getStringFromButtonOrPrompt(event)
 		if err != nil {
@@ -92,8 +95,8 @@ func (s Service) processName() bf.HandlerFunc {
 	}
 }
 
-func (s Service) processBannedName() bf.HandlerFunc {
-	return func(ctx context.Context, event bf.Event) error {
+func (s *Service) processBannedName() bf.HandlerFunc {
+	return func(_ context.Context, event bf.Event) error {
 		name, err := getStringFromButtonOrPrompt(event)
 		if err != nil {
 			return fmt.Errorf("can't get name: %w", err)
@@ -113,8 +116,8 @@ func (s Service) processBannedName() bf.HandlerFunc {
 	}
 }
 
-func (s Service) processWorstFeeling(name string, feelingScore string) bf.HandlerFunc {
-	return func(ctx context.Context, event bf.Event) error {
+func (s *Service) processWorstFeeling(name string, feelingScore string) bf.HandlerFunc {
+	return func(_ context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Sorry, " + name + "!")
 		layer.AddText("I hope you will feel better")
@@ -139,8 +142,8 @@ func (s Service) processWorstFeeling(name string, feelingScore string) bf.Handle
 	}
 }
 
-func (s Service) processNeutralFeeling(name string, _ string) bf.HandlerFunc {
-	return func(ctx context.Context, event bf.Event) error {
+func (s *Service) processNeutralFeeling(name string, _ string) bf.HandlerFunc {
+	return func(_ context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Ok, " + name + "!")
 		layer.AddText("I hope you will feel better")
@@ -155,8 +158,8 @@ func (s Service) processNeutralFeeling(name string, _ string) bf.HandlerFunc {
 	}
 }
 
-func (s Service) processGoodFeeling(name string, _ string) bf.HandlerFunc {
-	return func(ctx context.Context, event bf.Event) error {
+func (s *Service) processGoodFeeling(name string, _ string) bf.HandlerFunc {
+	return func(_ context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Great, " + name + "!")
 		layer.AddText("I am glad to hear that")
@@ -174,8 +177,8 @@ func (s Service) processGoodFeeling(name string, _ string) bf.HandlerFunc {
 	}
 }
 
-func (s Service) processJoke() bf.HandlerFunc {
-	return func(ctx context.Context, event bf.Event) error {
+func (s *Service) processJoke() bf.HandlerFunc {
+	return func(_ context.Context, event bf.Event) error {
 		joke := event.Text
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Aha-ha! That is a good joke:")
@@ -193,8 +196,8 @@ func (s Service) processJoke() bf.HandlerFunc {
 	}
 }
 
-func (s Service) saveJoke(joke string) bf.HandlerFunc {
-	return func(ctx context.Context, event bf.Event) error {
+func (s *Service) saveJoke(joke string) bf.HandlerFunc {
+	return func(_ context.Context, event bf.Event) error {
 		layer := s.botFrame.NewLayer()
 		layer.AddText("Ok, I will save it")
 		s.repo.SaveJoke(joke)

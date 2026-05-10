@@ -212,7 +212,7 @@ func TestGetFileURL(t *testing.T) {
 	}
 }
 
-func TestLoaderButton_EmptyScreen(t *testing.T) {
+func TestLoaderButton_EmptyScreen(_ *testing.T) {
 	bot, _ := newTestBot()
 	cancel := bot.LoaderButton(1, nil)
 	cancel()
