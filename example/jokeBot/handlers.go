@@ -220,8 +220,7 @@ func getStringFromButtonOrPrompt(event bf.Event) (string, error) {
 	case bf.EventKindInlineButton:
 		return event.ButtonText, nil
 	case bf.EventKindCommand, bf.EventKindVoice:
-		fallthrough
-	default:
 		return "", errors.New("unexpected event kind")
 	}
+	return "", errors.New("unexpected event kind")
 }

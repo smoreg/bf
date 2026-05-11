@@ -3,6 +3,7 @@ package bf
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestStop_Idempotent(t *testing.T) {
@@ -26,7 +27,7 @@ func TestStop_StopsCleaner(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-mustTimeout(t):
+	case <-time.After(2 * time.Second):
 		t.Fatal("cleaner did not exit on Stop")
 	}
 }
