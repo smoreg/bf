@@ -1,20 +1,14 @@
-<img alt="bf mascot" align="right" width="240" height="240" src="https://i.ibb.co/P69qSRC/smoreg-Combine-the-image-of-the-Golang-Gopher-and-Cthulhu-into-59680cfc-4566-4e6b-bbfb-791d2dd37d94.png">
+<img alt="bf mascot" align="right" width="220" height="220" src="https://i.ibb.co/P69qSRC/smoreg-Combine-the-image-of-the-Golang-Gopher-and-Cthulhu-into-59680cfc-4566-4e6b-bbfb-791d2dd37d94.png">
 
-# bf — bot framework for Telegram
+# bf
 
 [![CI](https://github.com/smoreg/bf/actions/workflows/ci.yml/badge.svg)](https://github.com/smoreg/bf/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/smoreg/bf/branch/main/graph/badge.svg)](https://codecov.io/gh/smoreg/bf)
 [![Go Reference](https://pkg.go.dev/badge/github.com/smoreg/bf.svg)](https://pkg.go.dev/github.com/smoreg/bf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/smoreg/bf)](https://goreportcard.com/report/github.com/smoreg/bf)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/smoreg/bf)](go.mod)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A small Go framework for writing Telegram bots around a per-chat *layer*
-pattern: each `SendMsg` installs a one-shot set of handlers expected from the
-user's next message, with a permanent default layer as fallback.
-
-> **Status:** alpha. The public API is usable but may evolve before `v1.0.0` —
-> pin a tag in your `go.mod`.
+A small, opinionated Telegram-bot framework for Go.
 
 ## Install
 
@@ -22,9 +16,9 @@ user's next message, with a permanent default layer as fallback.
 go get github.com/smoreg/bf
 ```
 
-Requires Go 1.26 or newer.
+Requires Go 1.26.
 
-## Quick start
+## Hello, world
 
 ```go
 package main
@@ -44,8 +38,8 @@ func main() {
     }
     defer bot.Stop()
 
-    bot.RegisterCommand("/start", func(ctx context.Context, ev bf.Event) error {
-        return bot.SendText(ev.ChatID, "Hello, "+ev.FirstName)
+    bot.RegisterCommand("/start", func(_ context.Context, ev bf.Event) error {
+        return bot.SendText(ev.ChatID, "hi, "+ev.FirstName)
     })
 
     if err := bot.Start(context.Background()); err != nil {
@@ -54,43 +48,55 @@ func main() {
 }
 ```
 
-## Core concepts
+That's it. Ctrl-C to stop.
 
-- **`ChatBot`** — the bot interface. Construct with `bf.NewBot(token, opts...)`.
-- **`HandlerLayer`** — a set of handlers (commands, text, inline buttons,
-  reply-keyboard buttons, voice). Build one via `bot.NewLayer(...)` and send
-  it with `bot.SendMsg(chatID, layer)` — the layer matches the very next
-  message from that chat, then is wiped. Handlers registered directly on the
-  bot live on a permanent default layer.
-- **Middlewares** — wrap every handler. Registered via
-  `bot.RegisterMiddleware(...)`; applied in registration order, last added
-  runs outermost.
-- **Options** — `WithLogger`, `WithDebug`, `WithParseMode`, `WithLayerTTL`.
-  By default the bot uses a no-op logger and HTML parse mode.
+## How it works
+
+You register **handlers** on the bot. A handler is `func(ctx, event) error`.
+
+* `RegisterCommand("/foo", h)` — fires when the user types `/foo`.
+* `RegisterDefaultHandler(h)` — fires for anything else.
+* Inside any handler you can build a **layer** with `bot.NewLayer("ask")`,
+  attach buttons via `layer.RegisterIButton("Yes", h)`, and send it with
+  `bot.SendMsg(chatID, layer)`. The layer matches the **next** message from
+  that chat, then is wiped.
+
+That's the whole model: permanent default handlers + per-chat one-shot
+layers for follow-up questions.
+
+## Options
+
+```go
+bot, _ := bf.NewBot(token,
+    bf.WithLogger(myLogger),         // any 8-method logger; default is no-op
+    bf.WithParseMode(tgbotapi.ModeHTML),
+    bf.WithLayerTTL(30 * time.Minute),
+    bf.WithUpdateConcurrency(64),
+)
+```
+
+For a self-hosted Telegram Bot API server use `bf.NewBotWithEndpoint(token, endpoint, opts...)`.
 
 ## Examples
 
-- [`example/echo`](example/echo) — minimal echo bot.
-- [`example/jokeBot`](example/jokeBot) — multi-step dialogue with inline
-  buttons, reply text and `RetryLastLayer`.
-
-Run an example with:
+* [`example/echo`](example/echo) — minimal echo bot.
+* [`example/jokeBot`](example/jokeBot) — multi-step dialogue with inline
+  buttons and `RetryLastLayer`.
 
 ```sh
 TEST_TGBOT_API_KEY=<your-bot-token> go run ./example/echo
 ```
 
-## Roadmap
+## Status
 
-Tracked in [GitHub issues](https://github.com/smoreg/bf/issues). Open one if a
-feature you need is missing.
+Alpha — the API may change before `v1.0.0`. Pin a tag in your `go.mod`.
+Roadmap and known gaps are in [FEATURES.md](FEATURES.md).
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for local
-setup and the PR checklist. By participating you agree to abide by the
-[Code of Conduct](CODE_OF_CONDUCT.md).
+PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+For security issues please follow [SECURITY.md](SECURITY.md).
 
 ## License
 
-[MIT](LICENSE)
+MIT — see [LICENSE](LICENSE).

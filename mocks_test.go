@@ -89,7 +89,7 @@ func newTestBot() (*ChatBotImpl, *mockTelegramAPI) {
 		shutdown:            make(chan struct{}),
 	}
 	bot.defaultHandlerLayer = bot.NewLayer()
-	bot.defaultHandlerLayer.ttl = nowPlus(layerTTLForever)
+	bot.defaultHandlerLayer.ttl = time.Now().Add(layerTTLForever)
 	bot.RegisterErrorHandler(bot.defaultErrorHandler)
 	bot.RegisterDefaultHandler(bot.defaultEventHandler)
 	return bot, mock
